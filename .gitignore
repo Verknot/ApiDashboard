@@ -2,6 +2,8 @@
 bin/
 obj/
 out/
+backend/tmp-*/
+tmp-*/
 *.user
 *.suo
 *.userosscache
