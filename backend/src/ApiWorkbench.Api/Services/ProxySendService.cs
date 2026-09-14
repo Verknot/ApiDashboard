@@ -53,6 +53,7 @@ public sealed class ProxySendService(
         {
             service = await db.Services.AsNoTracking()
                 .Include(s => s.Urls)
+                .Include(s => s.SwaggerSources)
                 .FirstOrDefaultAsync(s => s.Id == serviceId && s.IsActive, cancellationToken);
             if (service is null)
             {
@@ -97,7 +98,9 @@ public sealed class ProxySendService(
             }
         }
 
-        var (client, disposeClient) = CreateClient(service);
+        var module = service is null ? null : ServiceAuthResolver.MatchModuleByUrl(service, target);
+        var auth = service is null ? null : ServiceAuthResolver.Resolve(service, module);
+        var (client, disposeClient) = CreateClient(service, auth);
         var clock = Stopwatch.StartNew();
         try
         {
@@ -125,14 +128,14 @@ public sealed class ProxySendService(
         }
     }
 
-    private (HttpClient Client, bool Dispose) CreateClient(ServiceEntity? service)
+    private (HttpClient Client, bool Dispose) CreateClient(ServiceEntity? service, ServiceAuthContext? auth)
     {
-        if (service is null || !ClientCertLocator.NeedsClientCertificate(service))
+        if (service is null || auth is null || !auth.NeedsClientCertificate)
         {
             return (httpClientFactory.CreateClient("relay"), false);
         }
 
-        var handler = ClientCertLocator.CreateHandler(service, configuration, hostEnvironment);
+        var handler = ClientCertLocator.CreateHandler(auth, service.Name, configuration, hostEnvironment);
         return (new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(60) }, true);
     }
 
@@ -179,7 +182,17 @@ public sealed class ProxySendService(
 
         Add(response.Headers);
         Add(response.Content.Headers);
-        return map;
+        try
+        {
+            Add(response.TrailingHeaders);
+        }
+        catch (NotSupportedException)
+        {
+            // Some handlers do not support trailing headers.
+        }
+
+        // Plain dictionary: OrdinalIgnoreCase comparer can confuse some JSON serializers.
+        return new Dictionary<string, string>(map, StringComparer.Ordinal);
     }
 
     private static string Truncate(string body, int maxBytes)

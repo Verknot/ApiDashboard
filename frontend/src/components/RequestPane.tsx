@@ -12,12 +12,26 @@ import {
   saveTemplate,
   saveUserTags,
 } from '../api/client'
+import { applyParametersToUrl, useEndpointParameters } from '../api/parameters'
 import { isBlankRequestBody, prettyJson, seedRequestBody } from '../api/schema'
 import type { CatalogService, HistoryItem, RequestTemplate, ServiceEndpoint } from '../api/types'
-import { IconDeviceFloppy, IconFileCode, IconKey, IconRefresh, IconSend, IconTag, IconTrash } from '../icons'
-import { resolveBaseUrl, sendModeHint, tokenScopeKey, useSession, useWorkbench } from '../store/workbench'
+import {
+  IconCopy,
+  IconDeviceFloppy,
+  IconEye,
+  IconEyeOff,
+  IconFileCode,
+  IconKey,
+  IconRefresh,
+  IconSend,
+  IconTag,
+  IconTrash,
+} from '../icons'
+import { resolveBaseUrl, resolveModuleAuth, sendModeHint, tokenScopeKey, useSession, useWorkbench } from '../store/workbench'
 import { ContractDiffPanel } from './ContractDiffPanel'
 import { EndpointHistory } from './EndpointHistory'
+import { EndpointParamsForm } from './EndpointParamsForm'
+import { JsonResponseViewer } from './JsonResponseViewer'
 import { ResponseHeaderList } from './ResponseHeaderList'
 
 type Props = {
@@ -77,8 +91,16 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
     return isBlankRequestBody(stored) ? seedRequestBody(endpoint) : stored
   })
   const region = regionByServiceId[service.id] ?? service.defaultRegion ?? undefined
+  const moduleAuth = resolveModuleAuth(service, endpoint.module)
   const baseUrl = resolveBaseUrl(service, environment, region, endpoint.module)
-  const defaultUrl = endpoint && baseUrl ? `${baseUrl.replace(/\/$/, '')}${endpoint.path}` : (baseUrl ?? '')
+  const parameters = useEndpointParameters(endpoint.path, endpoint.parameters)
+  const [paramValues, setParamValues] = useState<Record<string, string>>({})
+  const defaultUrl = useMemo(() => {
+    if (!baseUrl) {
+      return ''
+    }
+    return applyParametersToUrl(baseUrl, endpoint.path, paramValues, parameters)
+  }, [baseUrl, endpoint.path, paramValues, parameters])
 
   const [url, setUrl] = useState(defaultUrl)
   const [tagDraft, setTagDraft] = useState('')
@@ -90,13 +112,22 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
   const [templateOpen, setTemplateOpen] = useState(false)
   const [templateName, setTemplateName] = useState('')
   const [fetchingToken, setFetchingToken] = useState(false)
+  const [showToken, setShowToken] = useState(false)
 
   const body = draftBody
-  const token = (tokenByScope ?? {})[tokenScopeKey(service.id, environment, region)] ?? ''
+  const token = (tokenByScope ?? {})[tokenScopeKey(service.id, environment, region, endpoint.module)] ?? ''
 
   useEffect(() => {
     openTab(service.id, endpoint.id)
   }, [endpoint.id, openTab, service.id])
+
+  useEffect(() => {
+    setUrl(defaultUrl)
+  }, [defaultUrl])
+
+  useEffect(() => {
+    setParamValues({})
+  }, [endpoint.id])
 
   useEffect(() => {
     setUrl(defaultUrl)
@@ -148,7 +179,7 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
       if (hasBody(endpoint.method)) {
         headers['Content-Type'] = 'application/json'
       }
-      if (service.authType === 'token' && token.trim()) {
+      if (moduleAuth.authType === 'token' && token.trim()) {
         headers.Authorization = `Bearer ${token.trim()}`
       }
 
@@ -167,12 +198,14 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
         } catch {
           pretty = relay.body
         }
+        const responseHeaders =
+          relay.headers && typeof relay.headers === 'object' ? { ...relay.headers } : {}
         setResult({
           status: relay.status,
           timeMs: relay.timeMs,
           body: pretty,
           error: relay.error ?? undefined,
-          headers: relay.headers ?? {},
+          headers: responseHeaders,
         })
         void saveHistory({
           serviceId: service.id,
@@ -186,7 +219,7 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
           responseStatus: relay.status,
           responseBody: pretty,
           responseTimeMs: relay.timeMs,
-          responseHeaders: JSON.stringify(relay.headers ?? {}),
+          responseHeaders: JSON.stringify(responseHeaders),
         }).then(() => setHistoryTick((tick) => tick + 1))
       } catch (error) {
         const text = getApiMessage(error, 'Send failed')
@@ -302,20 +335,41 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
 
       <label className="field-label">URL</label>
       <input className="url-input" value={url} onChange={(event) => setUrl(event.target.value)} />
-      <p className="hint-line send-hint">{sendModeHint(sendViaProxy, service.authType, url)}</p>
+      <p className="hint-line send-hint">{sendModeHint(sendViaProxy, moduleAuth.authType, url)}</p>
+      {!sendViaProxy ? (
+        <p className="hint-line">
+          Browser mode: CORS often exposes only content-type / content-length. Use proxy to see all response headers.
+        </p>
+      ) : null}
 
-      {service.authType === 'token' ? (
+      <EndpointParamsForm
+        parameters={parameters}
+        values={paramValues}
+        onChange={(name, value) => setParamValues((current) => ({ ...current, [name]: value }))}
+      />
+
+      {moduleAuth.authType === 'token' ? (
         <>
           <label className="field-label">Bearer token</label>
           <div className="token-row">
             <input
               className="url-input"
-              type="password"
+              type={showToken ? 'text' : 'password'}
               value={token}
               placeholder="not stored in JWT, session tab only"
-              onChange={(event) => setServiceToken(service.id, environment, region, event.target.value)}
+              onChange={(event) =>
+                setServiceToken(service.id, environment, region, event.target.value, endpoint.module)
+              }
             />
-            {service.canFetchToken && me?.canSend ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-compact"
+              title={showToken ? 'Hide token' : 'Show token'}
+              onClick={() => setShowToken((value) => !value)}
+            >
+              {showToken ? <IconEyeOff size={16} /> : <IconEye size={16} />}
+            </button>
+            {moduleAuth.canFetchToken && me?.canSend ? (
               <button
                 type="button"
                 className="btn btn-ghost"
@@ -324,8 +378,17 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
                 onClick={async () => {
                   setFetchingToken(true)
                   try {
-                    const next = await fetchServiceToken(service.id, environment, region)
-                    setServiceToken(service.id, environment, region, next)
+                    const next = await fetchServiceToken(service.id, environment, region, endpoint.module)
+                    if (next.redirectUrl) {
+                      window.open(next.redirectUrl, '_blank', 'noopener,noreferrer')
+                      message.info('Redirect opened in a new tab')
+                      return
+                    }
+                    if (!next.accessToken) {
+                      message.error('Token response was empty')
+                      return
+                    }
+                    setServiceToken(service.id, environment, region, next.accessToken, endpoint.module)
                     message.success('Token fetched')
                   } catch (error) {
                     message.error(getApiMessage(error, 'Could not fetch token'))
@@ -412,6 +475,32 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
           <IconSend size={16} />
           {sending ? 'Sending…' : sendViaProxy ? 'Send · proxy' : 'Send · browser'}
         </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          title="Copy request"
+          onClick={async () => {
+            const headers: Record<string, string> = { Accept: 'application/json' }
+            if (hasBody(endpoint.method)) {
+              headers['Content-Type'] = 'application/json'
+            }
+            if (moduleAuth.authType === 'token' && token.trim()) {
+              headers.Authorization = 'Bearer ***'
+            }
+            const text = [
+              `${endpoint.method.toUpperCase()} ${url}`,
+              `Headers: ${JSON.stringify(headers, null, 2)}`,
+              hasBody(endpoint.method) ? `Body:\n${body}` : null,
+            ]
+              .filter(Boolean)
+              .join('\n\n')
+            await navigator.clipboard.writeText(text)
+            message.success('Request copied')
+          }}
+        >
+          <IconCopy size={16} />
+          Copy req
+        </button>
         {me?.canGenerateDto ? (
           <button
             type="button"
@@ -424,7 +513,13 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
             DTO
           </button>
         ) : null}
-        <button type="button" className="btn btn-ghost" onClick={() => setShowDiff((value) => !value)}>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          disabled
+          title="Contract Diff временно отключён"
+          onClick={() => setShowDiff((value) => !value)}
+        >
           Diff
         </button>
       </div>
@@ -436,12 +531,38 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
               {result.status ?? 'ERR'}
             </span>
             <span>{result.timeMs} ms</span>
+            <span>{Object.keys(result.headers).length} headers</span>
             {result.error ? <span>network</span> : null}
+            <button
+              type="button"
+              className="btn btn-ghost btn-compact"
+              style={{ marginLeft: 'auto' }}
+              title="Copy response"
+              onClick={async () => {
+                const text = [
+                  `Status: ${result.status ?? 'ERR'}`,
+                  `Headers:\n${JSON.stringify(result.headers, null, 2)}`,
+                  `Body:\n${result.body}`,
+                ].join('\n\n')
+                await navigator.clipboard.writeText(text)
+                message.success('Response copied')
+              }}
+            >
+              <IconCopy size={14} />
+              Copy res
+            </button>
           </div>
           {Object.keys(result.headers).length > 0 ? (
             <ResponseHeaderList headers={result.headers} splunkUrl={service.splunkUrl} />
           ) : null}
-          <pre>{result.body || ' '}</pre>
+          <JsonResponseViewer
+            value={result.body || ' '}
+            onChange={(next) => setResult({ ...result, body: next })}
+            onCopy={async () => {
+              await navigator.clipboard.writeText(result.body || '')
+              message.success('Body copied')
+            }}
+          />
         </section>
       ) : null}
 

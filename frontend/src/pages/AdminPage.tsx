@@ -197,6 +197,45 @@ function CatalogAdmin() {
             <code>regions</code> общий на сервис; адрес выбирается как swagger + среда + регион.
           </p>
           <p className="field-label" style={{ marginTop: 14 }}>
+            api_auth у swagger (разный Send на подсервисах)
+          </p>
+          <p>
+            Один корень сервиса, у каждого swagger свой Send: UserPortal — token, backend — certificate. Поле{' '}
+            <code>swagger.auth</code> по-прежнему только для скачивания спеки (basic/none). Для API используйте{' '}
+            <code>api_auth</code>. Без <code>api_auth</code> модуль наследует сервисный <code>auth</code>. PFX можно
+            задать на сервисе один раз — модули его переиспользуют.
+          </p>
+          <pre>{`swagger:
+  - name: UserPortal
+    url: https://host/userportal/swagger.yml
+    auth: basic
+    username: u1
+    password: "123"
+    environments:
+      dev: https://api.dev/userportal
+      stage: https://api.stage/userportal
+      prod: https://api.prod/userportal
+    api_auth:
+      type: token
+      token_url: https://auth.company.com/token
+      cert_path: client.pfx
+  - name: backend
+    url: https://host/backend/swagger.json
+    auth: none
+    environments:
+      dev: https://api.dev/order
+      stage: https://api.stage/order
+      prod: https://api.prod/order
+    api_auth:
+      type: certificate
+      cert_path: client.pfx
+environments:
+  dev: https://api.dev/userportal
+  stage: https://api.stage/userportal
+  prod: https://api.prod/userportal
+auth:
+  type: none`}</pre>
+          <p className="field-label" style={{ marginTop: 14 }}>
             auth.token
           </p>
           <p>

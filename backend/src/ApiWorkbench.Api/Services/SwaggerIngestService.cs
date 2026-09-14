@@ -114,8 +114,20 @@ public sealed class SwaggerIngestService(
             var label = string.IsNullOrEmpty(module) ? service.Name : $"{service.Name}/{module}";
             try
             {
-                var json = await LoadDocumentAsync(service, source, cancellationToken);
-                using var raw = JsonDocument.Parse(json);
+                var text = await LoadDocumentAsync(service, source, cancellationToken);
+                using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
+                var document = new OpenApiStreamReader().Read(stream, out var diagnostic);
+                if (document.Paths is null || document.Paths.Count == 0)
+                {
+                    var hint = diagnostic.Errors.Count > 0
+                        ? string.Join("; ", diagnostic.Errors.Select(e => e.Message))
+                        : "В спецификации нет paths";
+                    errors.Add($"{label}: {hint}");
+                    continue;
+                }
+
+                // Store as JSON in jsonb; OpenAPI YAML is accepted on download and converted here.
+                using var raw = ToJsonDocument(text, document);
 
                 var previousSnapshot = await db.ContractSnapshots
                     .AsNoTracking()
@@ -135,17 +147,6 @@ public sealed class SwaggerIngestService(
                     FetchedAt = DateTimeOffset.UtcNow,
                     RawJson = JsonDocument.Parse(raw.RootElement.GetRawText())
                 });
-
-                using var stream = new MemoryStream(Encoding.UTF8.GetBytes(json));
-                var document = new OpenApiStreamReader().Read(stream, out var diagnostic);
-                if (document.Paths is null || document.Paths.Count == 0)
-                {
-                    var hint = diagnostic.Errors.Count > 0
-                        ? string.Join("; ", diagnostic.Errors.Select(e => e.Message))
-                        : "В спецификации нет paths";
-                    errors.Add($"{label}: {hint}");
-                    continue;
-                }
 
                 var parsed = ParseEndpoints(service.Id, module, document);
                 total += parsed.Count;
@@ -170,6 +171,7 @@ public sealed class SwaggerIngestService(
                         row.OperationId = item.OperationId;
                         row.RequestSchema = item.RequestSchema;
                         row.ResponseSchema = item.ResponseSchema;
+                        row.Parameters = item.Parameters;
                         row.Tags = item.Tags;
                         row.Module = module;
                     }
@@ -242,7 +244,7 @@ public sealed class SwaggerIngestService(
             return await File.ReadAllTextAsync(full, Encoding.UTF8, cancellationToken);
         }
 
-        var (client, dispose) = CreateSwaggerClient(service);
+        var (client, dispose) = CreateSwaggerClient(service, source);
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, swaggerUrl);
@@ -269,7 +271,7 @@ public sealed class SwaggerIngestService(
         }
         catch (Exception ex) when (ex is HttpRequestException or AuthenticationException)
         {
-            if (ClientCertLocator.NeedsClientCertificate(service))
+            if (ClientCertLocator.NeedsClientCertificate(ServiceAuthResolver.Resolve(service, source.Name)))
             {
                 throw new InvalidOperationException(
                     $"Swagger {service.Name}: TLS/сеть. Нужны HTTPS и PFX из C:\\pult-certs. {ex.Message}",
@@ -287,14 +289,15 @@ public sealed class SwaggerIngestService(
         }
     }
 
-    private (HttpClient Client, bool Dispose) CreateSwaggerClient(ServiceEntity service)
+    private (HttpClient Client, bool Dispose) CreateSwaggerClient(ServiceEntity service, ServiceSwaggerSource source)
     {
-        if (!ClientCertLocator.NeedsClientCertificate(service))
+        var auth = ServiceAuthResolver.Resolve(service, source.Name);
+        if (!auth.NeedsClientCertificate)
         {
             return (httpClientFactory.CreateClient("swagger"), false);
         }
 
-        var handler = ClientCertLocator.CreateHandler(service, configuration, hostEnvironment);
+        var handler = ClientCertLocator.CreateHandler(auth, service.Name, configuration, hostEnvironment);
         return (new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) }, true);
     }
 
@@ -532,12 +535,81 @@ public sealed class SwaggerIngestService(
                     OperationId = operation.OperationId,
                     RequestSchema = ToJson(OpenApiSchemaSupport.Inline(document, jsonContent?.Schema)),
                     ResponseSchema = ToJson(OpenApiSchemaSupport.Inline(document, responseMedia?.Schema)),
+                    Parameters = ToParametersJson(item, operation),
                     Tags = operation.Tags?.Select(t => t.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList() ?? []
                 });
             }
         }
 
         return list;
+    }
+
+    private static JsonDocument? ToParametersJson(OpenApiPathItem pathItem, OpenApiOperation operation)
+    {
+        var merged = new List<OpenApiParameter>();
+        if (pathItem.Parameters is { Count: > 0 })
+        {
+            merged.AddRange(pathItem.Parameters.Where(p => p is not null)!);
+        }
+
+        if (operation.Parameters is { Count: > 0 })
+        {
+            foreach (var parameter in operation.Parameters.Where(p => p is not null))
+            {
+                if (merged.Any(existing =>
+                        string.Equals(existing.Name, parameter!.Name, StringComparison.OrdinalIgnoreCase)
+                        && existing.In == parameter.In))
+                {
+                    continue;
+                }
+
+                merged.Add(parameter!);
+            }
+        }
+
+        if (merged.Count == 0)
+        {
+            return null;
+        }
+
+        var rows = merged.Select(parameter => new Dictionary<string, object?>
+        {
+            ["name"] = parameter.Name,
+            ["in"] = parameter.In?.ToString().ToLowerInvariant() ?? "query",
+            ["required"] = parameter.Required,
+            ["description"] = parameter.Description,
+            ["type"] = parameter.Schema?.Type,
+            ["format"] = parameter.Schema?.Format
+        }).ToList();
+
+        return JsonDocument.Parse(JsonSerializer.Serialize(rows));
+    }
+
+    /// <summary>
+    /// Prefer original JSON body for stable contract diffs; convert OpenAPI YAML to JSON.
+    /// </summary>
+    private static JsonDocument ToJsonDocument(string text, OpenApiDocument document)
+    {
+        var trimmed = text.AsSpan().TrimStart();
+        if (trimmed.Length > 0 && trimmed[0] == '{')
+        {
+            try
+            {
+                return JsonDocument.Parse(text);
+            }
+            catch (JsonException)
+            {
+                // Fall through and serialize the parsed OpenAPI model.
+            }
+        }
+
+        var asJson = document.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
+        if (string.IsNullOrWhiteSpace(asJson))
+        {
+            throw new InvalidOperationException("Не удалось сериализовать OpenAPI (YAML/JSON) в JSON.");
+        }
+
+        return JsonDocument.Parse(asJson);
     }
 
     private static JsonDocument? ToJson(OpenApiSchema? schema)

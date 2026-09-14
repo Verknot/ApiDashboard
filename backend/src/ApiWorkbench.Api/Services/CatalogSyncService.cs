@@ -182,15 +182,15 @@ public sealed class CatalogSyncService(
             throw new InvalidOperationException($"Неизвестный auth.type '{entry.Auth?.Type}'.");
         }
 
-        var swaggerSpecs = ResolveSwaggerSpecs(entry);
-        var swagger = swaggerSpecs.FirstOrDefault();
-
         var regions = entry.Regions?
             .Where(r => !string.IsNullOrWhiteSpace(r.Code))
             .Select((r, i) => new ResolvedRegion(r.Code.Trim().ToLowerInvariant(), string.IsNullOrWhiteSpace(r.Label) ? r.Code.Trim().ToUpperInvariant() : r.Label.Trim(), i, r.Environments))
             .ToList() ?? [];
 
         var isRegional = regions.Count > 0;
+        var swaggerSpecs = ResolveSwaggerSpecs(entry, regions, isRegional);
+        var swagger = swaggerSpecs.FirstOrDefault();
+
         var urls = ResolveUrls(entry, regions, isRegional, entry.Environments, module: string.Empty, requireAll: true);
         foreach (var spec in swaggerSpecs.Where(item => !string.IsNullOrWhiteSpace(item.Name)))
         {
@@ -210,7 +210,17 @@ public sealed class CatalogSyncService(
             defaultRegion = null;
         }
 
-        var tokenAuth = ResolveTokenAuth(entry, regions, isRegional, authType);
+        var tokenAuth = ResolveTokenAuth(entry.Auth, regions, isRegional, authType, module: string.Empty);
+        var moduleTokenUrls = swaggerSpecs
+            .SelectMany(spec => spec.Token.Urls)
+            .ToList();
+        if (moduleTokenUrls.Count > 0)
+        {
+            tokenAuth = tokenAuth with
+            {
+                Urls = tokenAuth.Urls.Concat(moduleTokenUrls).ToList()
+            };
+        }
 
         return new ResolvedService(
             entry.Name.Trim(),
@@ -239,7 +249,10 @@ public sealed class CatalogSyncService(
             tokenAuth);
     }
 
-    private static List<ResolvedSwagger> ResolveSwaggerSpecs(ServiceYamlEntry entry)
+    private static List<ResolvedSwagger> ResolveSwaggerSpecs(
+        ServiceYamlEntry entry,
+        IReadOnlyList<ResolvedRegion> regions,
+        bool isRegional)
     {
         var items = entry.Swagger?.Items ?? [];
         if (items.Count == 0)
@@ -289,6 +302,11 @@ public sealed class CatalogSyncService(
                 throw new InvalidOperationException("environments у swagger укажите вместе с name.");
             }
 
+            if (spec.ApiAuth is not null && string.IsNullOrWhiteSpace(name) && items.Count > 1)
+            {
+                throw new InvalidOperationException("api_auth у swagger укажите вместе с name.");
+            }
+
             Dictionary<string, string>? swaggerEnvironments = null;
             if (spec.Environments is { Count: > 0 })
             {
@@ -305,6 +323,31 @@ public sealed class CatalogSyncService(
                 }
             }
 
+            string? apiAuthType = null;
+            string? certPath = null;
+            string? certBase64 = null;
+            string? certVault = null;
+            string? certPassword = null;
+            var moduleToken = ResolvedTokenAuth.Empty;
+            if (spec.ApiAuth is not null)
+            {
+                apiAuthType = (spec.ApiAuth.Type ?? "none").Trim().ToLowerInvariant();
+                if (apiAuthType is not ("token" or "certificate" or "none"))
+                {
+                    throw new InvalidOperationException($"Неизвестный api_auth.type '{spec.ApiAuth.Type}' у swagger '{name}'.");
+                }
+
+                certPath = FirstNonEmpty(spec.ApiAuth.CertPath);
+                certBase64 = FirstNonEmpty(spec.ApiAuth.CertBase64);
+                certVault = FirstNonEmpty(spec.ApiAuth.CertVault);
+                certPassword = spec.ApiAuth.CertPassword;
+                moduleToken = ResolveTokenAuth(spec.ApiAuth, regions, isRegional, apiAuthType, name);
+                if (apiAuthType == "token" && moduleToken.Urls.Count == 0)
+                {
+                    throw new InvalidOperationException($"У swagger '{name}' api_auth.type=token, но нет api_auth.token_url.");
+                }
+            }
+
             result.Add(new ResolvedSwagger(
                 name,
                 i,
@@ -316,7 +359,13 @@ public sealed class CatalogSyncService(
                 vaultBase64,
                 basicUsername,
                 basicPassword,
-                swaggerEnvironments));
+                swaggerEnvironments,
+                apiAuthType,
+                certPath,
+                certBase64,
+                certVault,
+                certPassword,
+                moduleToken));
         }
 
         return result;
@@ -377,12 +426,12 @@ public sealed class CatalogSyncService(
     }
 
     private static ResolvedTokenAuth ResolveTokenAuth(
-        ServiceYamlEntry entry,
+        AuthYaml? auth,
         IReadOnlyList<ResolvedRegion> regions,
         bool isRegional,
-        string authType)
+        string authType,
+        string module)
     {
-        var auth = entry.Auth;
         if (authType != "token" || auth?.TokenUrl is null)
         {
             return ResolvedTokenAuth.Empty;
@@ -423,7 +472,7 @@ public sealed class CatalogSyncService(
                 .Replace("{environment}", env, StringComparison.OrdinalIgnoreCase)
                 .Replace("{region}", region, StringComparison.OrdinalIgnoreCase)
                 .Trim();
-            urls.Add(new ResolvedTokenUrl(env, region, url));
+            urls.Add(new ResolvedTokenUrl(env, region, module, url));
         }
 
         string? bodyJson = null;
@@ -562,7 +611,13 @@ public sealed class CatalogSyncService(
                 VaultPasswordPath = swagger.VaultPasswordPath,
                 VaultBase64 = swagger.VaultBase64,
                 BasicUsername = swagger.BasicUsername,
-                BasicPassword = swagger.BasicPassword
+                BasicPassword = swagger.BasicPassword,
+                ApiAuthType = swagger.ApiAuthType,
+                CertPath = swagger.CertPath,
+                CertBase64 = swagger.CertBase64,
+                CertVaultPath = swagger.CertVaultPath,
+                CertPassword = swagger.CertPassword,
+                TokenField = swagger.ApiAuthType is null ? null : swagger.Token.TokenField
             });
         }
 
@@ -572,6 +627,7 @@ public sealed class CatalogSyncService(
             {
                 Environment = tokenUrl.Environment,
                 RegionCode = tokenUrl.RegionCode,
+                Module = tokenUrl.Module,
                 Url = tokenUrl.Url
             });
         }
@@ -614,7 +670,13 @@ public sealed class CatalogSyncService(
         bool VaultBase64,
         string? BasicUsername,
         string? BasicPassword,
-        Dictionary<string, string>? Environments);
+        Dictionary<string, string>? Environments,
+        string? ApiAuthType,
+        string? CertPath,
+        string? CertBase64,
+        string? CertVaultPath,
+        string? CertPassword,
+        ResolvedTokenAuth Token);
 
     private sealed record ResolvedRegion(
         string Code,
@@ -624,7 +686,7 @@ public sealed class CatalogSyncService(
 
     private sealed record ResolvedUrl(string Environment, string RegionCode, string BaseUrl, string Module);
 
-    private sealed record ResolvedTokenUrl(string Environment, string RegionCode, string Url);
+    private sealed record ResolvedTokenUrl(string Environment, string RegionCode, string Module, string Url);
 
     private sealed record ResolvedTokenAuth(
         IReadOnlyList<ResolvedTokenUrl> Urls,

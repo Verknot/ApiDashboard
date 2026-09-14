@@ -27,6 +27,15 @@ export type ServiceUrl = {
 
 export type JsonSchema = Record<string, unknown> | null
 
+export type EndpointParameter = {
+  name: string
+  in: 'path' | 'query' | 'header' | 'cookie' | string
+  required?: boolean
+  type?: string | null
+  format?: string | null
+  description?: string | null
+}
+
 export type ServiceEndpoint = {
   id: number
   method: string
@@ -39,6 +48,13 @@ export type ServiceEndpoint = {
   requestSchema: JsonSchema
   responseSchema: JsonSchema
   requestExample: unknown
+  parameters: EndpointParameter[] | null
+}
+
+export type ServiceModule = {
+  name: string
+  authType: 'token' | 'certificate' | 'none' | string
+  canFetchToken: boolean
 }
 
 export type CatalogService = {
@@ -57,7 +73,7 @@ export type CatalogService = {
   urls: ServiceUrl[]
   endpoints: ServiceEndpoint[]
   endpointCount: number
-  modules: string[]
+  modules: ServiceModule[]
   canFetchToken: boolean
 }
 

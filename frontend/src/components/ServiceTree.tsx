@@ -36,7 +36,10 @@ function groupByTag(endpoints: ServiceEndpoint[]): TaggedEndpoints[] {
   return [...groups.entries()].map(([tag, items]) => ({ tag, endpoints: items }))
 }
 
-function groupByModule(endpoints: ServiceEndpoint[], preferredOrder: string[] = []): ModuleGroup[] | null {
+function groupByModule(
+  endpoints: ServiceEndpoint[],
+  preferredOrder: Array<string | { name: string }> = [],
+): ModuleGroup[] | null {
   const named = endpoints.some((item) => (item.module ?? '').trim().length > 0)
   if (!named) {
     return null
@@ -48,7 +51,8 @@ function groupByModule(endpoints: ServiceEndpoint[], preferredOrder: string[] = 
     list.push(endpoint)
     groups.set(module, list)
   }
-  const rank = new Map(preferredOrder.map((name, index) => [name.toLowerCase(), index]))
+  const orderNames = preferredOrder.map((item) => (typeof item === 'string' ? item : item.name))
+  const rank = new Map(orderNames.map((name, index) => [name.toLowerCase(), index]))
   return [...groups.entries()]
     .sort(([a], [b]) => {
       const ia = rank.get(a.toLowerCase())
@@ -308,9 +312,9 @@ export function ServiceTree({ services, loading, onOpenFree }: Props) {
                     <IconChevronRight size={14} />
                   </span>
                   <span className="service-color" style={{ background: service.color ?? '#7a8f6a' }} />
-                  <span style={{ minWidth: 0, flex: 1 }}>
-                    <span style={{ display: 'block', fontSize: 13, fontWeight: 600 }}>{service.name}</span>
-                    <span style={{ display: 'block', fontSize: 12, color: 'var(--mute)' }}>
+                  <span className="service-meta">
+                    <span className="service-name">{service.name}</span>
+                    <span className="service-sub">
                       {count > 0 ? `${count} endpoints` : (service.description ?? service.authType)}
                     </span>
                   </span>

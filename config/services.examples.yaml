@@ -4,6 +4,42 @@
 splunk_url: 'https://splunk.company.com/en-US/app/search/search?q=search%20ConversationId%3D"#ConversationId#"'
 
 services:
+  # One root, different API auth per swagger module (api_auth)
+  - name: order-service
+    description: Orders — UserPortal token, backend certificate
+    color: "#4CAF50"
+    proxy: true
+    swagger:
+      - name: UserPortal
+        url: https://api.dev.company.com/userportal/swagger.yml
+        auth: basic
+        username: swagger-reader
+        password: REPLACE
+        environments:
+          dev: https://api.dev.company.com/userportal
+          stage: https://api.stage.company.com/userportal
+          prod: https://api.prod.company.com/userportal
+        api_auth:
+          type: token
+          token_url: https://auth.dev.company.com/token
+          cert_path: client.pfx
+      - name: backend
+        url: https://api.dev.company.com/order/swagger/v1/swagger.json
+        auth: none
+        environments:
+          dev: https://api.dev.company.com/order
+          stage: https://api.stage.company.com/order
+          prod: https://api.prod.company.com/order
+        api_auth:
+          type: certificate
+          cert_path: client.pfx
+    environments:
+      dev: https://api.dev.company.com/userportal
+      stage: https://api.stage.company.com/userportal
+      prod: https://api.prod.company.com/userportal
+    auth:
+      type: none
+
   # Local sample swagger, no auth
   - name: demo-local
     description: Local sample OpenAPI
@@ -20,7 +56,7 @@ services:
       type: none
 
   # Swagger behind Basic (creds in Vault). API via Bearer + PFX file
-  - name: order-service
+  - name: order-service-single
     description: Orders — swagger basic from Vault, API token + cert_path
     color: "#4CAF50"
     proxy: true

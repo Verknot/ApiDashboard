@@ -1,3 +1,4 @@
+using ApiWorkbench.Api.Configuration;
 using ApiWorkbench.Api.Contracts;
 using ApiWorkbench.Api.Data;
 using ApiWorkbench.Api.Infrastructure;
@@ -51,41 +52,65 @@ public sealed class ServicesController(
             .ToDictionary(g => g.Key, g => g.MaxBy(x => (x.FetchedAt, x.Id))!);
 
         var result = visible
-            .Select(s => new ServiceResponse(
-                s.Id,
-                s.Name,
-                s.Description,
-                s.Color,
-                s.AuthType,
-                s.Proxy,
-                s.IsRegional,
-                s.DefaultRegion,
-                DirectSendSupported: true,
-                RequiresClientCertificate: s.AuthType == "certificate" && !s.Proxy,
-                s.SplunkUrl,
-                s.Regions
-                    .OrderBy(r => r.SortOrder)
-                    .Select(r => new RegionResponse(r.Code, r.Label, r.SortOrder))
-                    .ToList(),
-                s.Urls
-                    .OrderBy(u => u.Module)
-                    .ThenBy(u => u.Environment)
-                    .ThenBy(u => u.RegionCode)
-                    .Select(u => new ServiceUrlResponse(u.Environment, u.RegionCode, u.BaseUrl, u.Module ?? string.Empty))
-                    .ToList(),
-                s.Endpoints
-                    .OrderBy(e => e.Module)
-                    .ThenBy(e => e.Path)
-                    .ThenBy(e => e.Method)
-                    .Select(e => MapEndpoint(e, latest.GetValueOrDefault((s.Id, e.Module ?? string.Empty))?.RawJson))
-                    .ToList(),
-                s.Endpoints.Count,
-                s.SwaggerSources
+            .Select(s =>
+            {
+                var modules = s.SwaggerSources
                     .OrderBy(x => x.SortOrder)
-                    .Select(x => x.Name)
-                    .Where(name => !string.IsNullOrWhiteSpace(name))
-                    .ToList(),
-                s.AuthType == "token" && s.TokenUrls.Count > 0))
+                    .Where(x => !string.IsNullOrWhiteSpace(x.Name))
+                    .Select(x =>
+                    {
+                        var auth = ServiceAuthResolver.Resolve(s, x.Name);
+                        var canFetch = false;
+                        if (string.Equals(auth.AuthType, "token", StringComparison.OrdinalIgnoreCase))
+                        {
+                            canFetch = !string.IsNullOrWhiteSpace(x.ApiAuthType)
+                                ? s.TokenUrls.Any(t =>
+                                    string.Equals(t.Module ?? string.Empty, x.Name, StringComparison.OrdinalIgnoreCase))
+                                : s.TokenUrls.Any(t => string.IsNullOrEmpty(t.Module));
+                        }
+                        return new ServiceModuleResponse(x.Name, auth.AuthType, canFetch);
+                    })
+                    .ToList();
+
+                var serviceCanFetch = string.Equals(s.AuthType, "token", StringComparison.OrdinalIgnoreCase)
+                    && s.TokenUrls.Any(t => string.IsNullOrEmpty(t.Module));
+                var anyModuleCanFetch = modules.Any(m => m.CanFetchToken);
+                var requiresCert = !s.Proxy && (
+                    ServiceAuthResolver.Resolve(s).NeedsClientCertificate
+                    || modules.Any(m => string.Equals(m.AuthType, "certificate", StringComparison.OrdinalIgnoreCase)));
+
+                return new ServiceResponse(
+                    s.Id,
+                    s.Name,
+                    s.Description,
+                    s.Color,
+                    s.AuthType,
+                    s.Proxy,
+                    s.IsRegional,
+                    s.DefaultRegion,
+                    DirectSendSupported: true,
+                    RequiresClientCertificate: requiresCert,
+                    s.SplunkUrl,
+                    s.Regions
+                        .OrderBy(r => r.SortOrder)
+                        .Select(r => new RegionResponse(r.Code, r.Label, r.SortOrder))
+                        .ToList(),
+                    s.Urls
+                        .OrderBy(u => u.Module)
+                        .ThenBy(u => u.Environment)
+                        .ThenBy(u => u.RegionCode)
+                        .Select(u => new ServiceUrlResponse(u.Environment, u.RegionCode, u.BaseUrl, u.Module ?? string.Empty))
+                        .ToList(),
+                    s.Endpoints
+                        .OrderBy(e => e.Module)
+                        .ThenBy(e => e.Path)
+                        .ThenBy(e => e.Method)
+                        .Select(e => MapEndpoint(e, latest.GetValueOrDefault((s.Id, e.Module ?? string.Empty))?.RawJson))
+                        .ToList(),
+                    s.Endpoints.Count,
+                    modules,
+                    serviceCanFetch || anyModuleCanFetch);
+            })
             .ToList();
 
         return Ok(result);
@@ -153,7 +178,7 @@ public sealed class ServicesController(
 
         try
         {
-            return Ok(await tokens.FetchAsync(id, request.Environment, request.RegionCode, cancellationToken));
+            return Ok(await tokens.FetchAsync(id, request.Environment, request.RegionCode, request.Module, cancellationToken));
         }
         catch (KeyNotFoundException)
         {
@@ -197,6 +222,7 @@ public sealed class ServicesController(
             e.Module ?? string.Empty,
             OpenApiSchemaSupport.ResolveElement(requestSchema, document),
             JsonDocs.ToElement(e.ResponseSchema),
-            OpenApiSchemaSupport.ExampleElement(requestSchema, document));
+            OpenApiSchemaSupport.ExampleElement(requestSchema, document),
+            JsonDocs.ToElement(e.Parameters));
     }
 }

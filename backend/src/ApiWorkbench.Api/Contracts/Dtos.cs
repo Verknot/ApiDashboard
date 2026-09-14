@@ -21,6 +21,8 @@ public sealed record RegionResponse(string Code, string Label, int SortOrder);
 
 public sealed record ServiceUrlResponse(string Environment, string RegionCode, string BaseUrl, string Module);
 
+public sealed record ServiceModuleResponse(string Name, string AuthType, bool CanFetchToken);
+
 public sealed record ServiceResponse(
     int Id,
     string Name,
@@ -37,7 +39,7 @@ public sealed record ServiceResponse(
     IReadOnlyList<ServiceUrlResponse> Urls,
     IReadOnlyList<EndpointResponse> Endpoints,
     int EndpointCount,
-    IReadOnlyList<string> Modules,
+    IReadOnlyList<ServiceModuleResponse> Modules,
     bool CanFetchToken);
 
 public sealed record EndpointResponse(
@@ -51,7 +53,8 @@ public sealed record EndpointResponse(
     string Module,
     JsonElement? RequestSchema,
     JsonElement? ResponseSchema,
-    JsonElement? RequestExample);
+    JsonElement? RequestExample,
+    JsonElement? Parameters);
 
 public sealed record SwaggerServiceRefreshResponse(
     string Service,
@@ -124,9 +127,9 @@ public sealed record SaveTemplateRequest(int EndpointId, string Name, JsonElemen
 
 public sealed record TemplateResponse(int Id, int EndpointId, string Name, JsonElement TemplateBody, DateTimeOffset CreatedAt);
 
-public sealed record FetchTokenRequest(string Environment, string? RegionCode);
+public sealed record FetchTokenRequest(string Environment, string? RegionCode, string? Module = null);
 
-public sealed record FetchTokenResponse(string AccessToken);
+public sealed record FetchTokenResponse(string? AccessToken, string? RedirectUrl = null);
 
 public sealed record ProxySendRequest(
     int? ServiceId,

@@ -19,17 +19,23 @@ internal static class ClientCertLocator
     ];
 
     public static bool NeedsClientCertificate(ServiceEntity service) =>
-        string.Equals(service.AuthType, "certificate", StringComparison.OrdinalIgnoreCase)
-        || !string.IsNullOrWhiteSpace(service.CertPath)
-        || !string.IsNullOrWhiteSpace(service.CertBase64)
-        || !string.IsNullOrWhiteSpace(service.CertVaultPath);
+        NeedsClientCertificate(ServiceAuthResolver.Resolve(service));
+
+    public static bool NeedsClientCertificate(ServiceAuthContext auth) => auth.NeedsClientCertificate;
 
     public static HttpClientHandler CreateHandler(
         ServiceEntity service,
         IConfiguration configuration,
+        IHostEnvironment? environment) =>
+        CreateHandler(ServiceAuthResolver.Resolve(service), service.Name, configuration, environment);
+
+    public static HttpClientHandler CreateHandler(
+        ServiceAuthContext auth,
+        string serviceName,
+        IConfiguration configuration,
         IHostEnvironment? environment)
     {
-        var certificate = LoadCertificate(service, configuration, environment);
+        var certificate = LoadCertificate(auth, serviceName, configuration, environment);
         var handler = new HttpClientHandler
         {
             AllowAutoRedirect = false,
@@ -43,22 +49,29 @@ internal static class ClientCertLocator
     public static X509Certificate2 LoadCertificate(
         ServiceEntity service,
         IConfiguration configuration,
+        IHostEnvironment? environment) =>
+        LoadCertificate(ServiceAuthResolver.Resolve(service), service.Name, configuration, environment);
+
+    public static X509Certificate2 LoadCertificate(
+        ServiceAuthContext auth,
+        string serviceName,
+        IConfiguration configuration,
         IHostEnvironment? environment)
     {
-        var password = service.CertPassword ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(service.CertBase64))
+        var password = auth.CertPassword ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(auth.CertBase64))
         {
-            return LoadFromBase64(service.CertBase64, password);
+            return LoadFromBase64(auth.CertBase64, password);
         }
 
-        if (!string.IsNullOrWhiteSpace(service.CertVaultPath))
+        if (!string.IsNullOrWhiteSpace(auth.CertVaultPath))
         {
-            var raw = VaultKvReader.ReadString(configuration, service.CertVaultPath, CertVaultKeys);
+            var raw = VaultKvReader.ReadString(configuration, auth.CertVaultPath, CertVaultKeys);
             if (string.IsNullOrWhiteSpace(password))
             {
                 try
                 {
-                    password = VaultKvReader.ReadString(configuration, service.CertVaultPath, CertPasswordKeys);
+                    password = VaultKvReader.ReadString(configuration, auth.CertVaultPath, CertPasswordKeys);
                 }
                 catch (InvalidOperationException)
                 {
@@ -69,10 +82,10 @@ internal static class ClientCertLocator
             return LoadFromBase64(raw, password);
         }
 
-        var path = ResolveFile(service.CertPath, configuration, environment);
+        var path = ResolveFile(auth.CertPath, configuration, environment);
         if (path is null)
         {
-            throw new InvalidOperationException(MissingFileMessage(service));
+            throw new InvalidOperationException(MissingFileMessage(serviceName, auth));
         }
 
         return LoadFromFile(path, password);
@@ -187,21 +200,24 @@ internal static class ClientCertLocator
             .FirstOrDefault(File.Exists);
     }
 
-    public static string MissingFileMessage(ServiceEntity service)
+    public static string MissingFileMessage(ServiceEntity service) =>
+        MissingFileMessage(service.Name, ServiceAuthResolver.Resolve(service));
+
+    public static string MissingFileMessage(string serviceName, ServiceAuthContext auth)
     {
-        if (!string.IsNullOrWhiteSpace(service.CertVaultPath))
+        if (!string.IsNullOrWhiteSpace(auth.CertVaultPath))
         {
-            return $"No PFX for {service.Name}: Vault path '{service.CertVaultPath}'.";
+            return $"No PFX for {serviceName}: Vault path '{auth.CertVaultPath}'.";
         }
 
-        if (!string.IsNullOrWhiteSpace(service.CertBase64))
+        if (!string.IsNullOrWhiteSpace(auth.CertBase64))
         {
-            return $"No PFX for {service.Name}: cert_base64 is invalid.";
+            return $"No PFX for {serviceName}: cert_base64 is invalid.";
         }
 
-        var name = string.IsNullOrWhiteSpace(service.CertPath)
+        var name = string.IsNullOrWhiteSpace(auth.CertPath)
             ? "client.pfx"
-            : Path.GetFileName(service.CertPath.Replace('\\', '/'));
-        return $"No PFX for {service.Name}. Put {name} in {WindowsHostDirectory}, set auth.cert_base64, or auth.cert_vault.";
+            : Path.GetFileName(auth.CertPath.Replace('\\', '/'));
+        return $"No PFX for {serviceName}. Put {name} in {WindowsHostDirectory}, set auth.cert_base64 / api_auth.cert_base64, or cert_vault.";
     }
 }

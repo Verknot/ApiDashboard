@@ -130,15 +130,21 @@ export function WorkbenchPage() {
                 : ep
                   ? `${ep.method} ${ep.path}`
                   : (svc?.name ?? 'tab')
+            const method = tab.kind === 'free' ? (tab.method || 'GET').toUpperCase() : (ep?.method ?? '')
+            const pathLabel = tab.kind === 'free' ? 'free' : (ep?.path ?? (svc?.name ?? 'tab'))
             return (
               <button
                 key={tab.id}
                 type="button"
                 className={`tab${tab.id === activeTabId ? ' on' : ''}`}
+                title={label}
                 onClick={() => setActiveTab(tab.id)}
               >
                 <span className="tab-color" style={{ background: tab.kind === 'free' ? '#8a9bb5' : (svc?.color ?? '#7a8f6a') }} />
-                <span>{label}</span>
+                <span className="tab-text">
+                  {method ? <span className="tab-method">{method}</span> : null}
+                  <span className="tab-path">{pathLabel}</span>
+                </span>
                 <span
                   className="tab-close"
                   onClick={(event) => {
@@ -198,6 +204,11 @@ export function WorkbenchPage() {
               <>
                 <div className="meta-row">
                   <span className="meta">{selected.authType}</span>
+                  {selected.modules.length > 0 ? (
+                    <span className="meta" title={selected.modules.map((m) => `${m.name}:${m.authType}`).join(', ')}>
+                      modules: {selected.modules.map((m) => m.authType).join(' / ')}
+                    </span>
+                  ) : null}
                   {selected.isRegional ? <span className="meta">regional</span> : null}
                   <span className="meta">{selected.proxy ? 'proxy' : 'browser'}</span>
                 </div>

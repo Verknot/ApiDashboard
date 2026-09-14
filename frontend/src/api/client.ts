@@ -68,12 +68,20 @@ export async function fetchServiceToken(
   serviceId: number,
   environment: string,
   regionCode?: string,
-): Promise<string> {
-  const { data } = await api.post<{ accessToken: string }>(`/services/${serviceId}/token`, {
-    environment,
-    regionCode: regionCode ?? '',
-  })
-  return data.accessToken
+  module?: string,
+): Promise<{ accessToken: string | null; redirectUrl: string | null }> {
+  const { data } = await api.post<{ accessToken?: string | null; redirectUrl?: string | null }>(
+    `/services/${serviceId}/token`,
+    {
+      environment,
+      regionCode: regionCode ?? '',
+      module: module ?? '',
+    },
+  )
+  return {
+    accessToken: data.accessToken ?? null,
+    redirectUrl: data.redirectUrl ?? null,
+  }
 }
 
 export async function fetchServices(): Promise<CatalogService[]> {
@@ -85,8 +93,17 @@ export async function fetchServices(): Promise<CatalogService[]> {
       tags: endpoint.tags ?? [],
       userTags: endpoint.userTags ?? [],
       module: endpoint.module ?? '',
+      parameters: Array.isArray(endpoint.parameters) ? endpoint.parameters : null,
     })),
-    modules: service.modules ?? [],
+    modules: (service.modules ?? []).map((module) =>
+      typeof module === 'string'
+        ? { name: module, authType: service.authType, canFetchToken: Boolean(service.canFetchToken) }
+        : {
+            name: module.name,
+            authType: module.authType ?? service.authType,
+            canFetchToken: Boolean(module.canFetchToken),
+          },
+    ),
     urls: (service.urls ?? []).map((url) => ({ ...url, module: url.module ?? '' })),
     canFetchToken: Boolean(service.canFetchToken),
   }))

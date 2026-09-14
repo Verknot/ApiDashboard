@@ -10,7 +10,12 @@ namespace ApiWorkbench.Api.Services;
 
 public interface ITokenFetchService
 {
-    Task<FetchTokenResponse> FetchAsync(int serviceId, string environment, string? regionCode, CancellationToken cancellationToken = default);
+    Task<FetchTokenResponse> FetchAsync(
+        int serviceId,
+        string environment,
+        string? regionCode,
+        string? module,
+        CancellationToken cancellationToken = default);
 }
 
 public sealed class TokenFetchService(
@@ -23,6 +28,7 @@ public sealed class TokenFetchService(
         int serviceId,
         string environment,
         string? regionCode,
+        string? module,
         CancellationToken cancellationToken = default)
     {
         var env = environment.Trim().ToLowerInvariant();
@@ -35,58 +41,77 @@ public sealed class TokenFetchService(
             .AsNoTracking()
             .Include(s => s.TokenUrls)
             .Include(s => s.Urls)
+            .Include(s => s.SwaggerSources)
             .FirstOrDefaultAsync(s => s.Id == serviceId && s.IsActive, cancellationToken)
             ?? throw new KeyNotFoundException("Сервис не найден.");
 
-        if (!string.Equals(service.AuthType, "token", StringComparison.OrdinalIgnoreCase))
+        var moduleName = module?.Trim() ?? string.Empty;
+        var auth = ServiceAuthResolver.Resolve(service, moduleName);
+        if (!string.Equals(auth.AuthType, "token", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("У сервиса auth.type не token.");
+            throw new InvalidOperationException(
+                string.IsNullOrEmpty(moduleName)
+                    ? "У сервиса auth.type не token."
+                    : $"У модуля '{moduleName}' api_auth.type не token.");
         }
 
         var region = service.IsRegional ? (regionCode ?? service.DefaultRegion ?? string.Empty).Trim().ToLowerInvariant() : string.Empty;
-        var tokenUrl = service.TokenUrls.FirstOrDefault(u =>
-            string.Equals(u.Environment, env, StringComparison.OrdinalIgnoreCase)
-            && string.Equals(u.RegionCode ?? string.Empty, region, StringComparison.OrdinalIgnoreCase))
-            ?? service.TokenUrls.FirstOrDefault(u =>
-                string.Equals(u.Environment, env, StringComparison.OrdinalIgnoreCase)
-                && string.IsNullOrEmpty(u.RegionCode));
-
+        var tokenUrl = PickTokenUrl(service, env, region, moduleName);
         if (tokenUrl is null || string.IsNullOrWhiteSpace(tokenUrl.Url))
         {
-            throw new InvalidOperationException($"Нет auth.token_url для среды '{env}'.");
+            throw new InvalidOperationException(
+                string.IsNullOrEmpty(moduleName)
+                    ? $"Нет auth.token_url для среды '{env}'."
+                    : $"Нет api_auth.token_url у модуля '{moduleName}' для среды '{env}'.");
         }
 
-        var target = ResolveTarget(tokenUrl.Url, service, env, region);
+        var target = ResolveTarget(tokenUrl.Url, service, env, region, moduleName);
         if (!string.Equals(target.Scheme, "https", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException("token_url должен быть HTTPS: токен берётся с клиентским сертификатом.");
         }
 
-        if (!ClientCertLocator.NeedsClientCertificate(service))
+        if (!auth.NeedsClientCertificate)
         {
             throw new InvalidOperationException(
-                "Token fetch needs a client certificate: auth.cert_path, auth.cert_base64, or auth.cert_vault.");
+                "Token fetch needs a client certificate: auth/api_auth.cert_path, cert_base64, or cert_vault.");
         }
 
-        var (client, dispose) = CreateClient(service);
+        var (client, dispose) = CreateClient(auth, service.Name);
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, target);
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
             using var response = await client.SendAsync(request, cancellationToken);
             var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (!response.IsSuccessStatusCode)
+            var code = (int)response.StatusCode;
+            if (code is >= 300 and < 400)
             {
-                throw new InvalidOperationException($"Токен HTTP {(int)response.StatusCode}: {Truncate(body)}");
+                var location = response.Headers.Location;
+                var redirect = location is null
+                    ? null
+                    : (location.IsAbsoluteUri ? location : new Uri(target, location)).ToString();
+                if (string.IsNullOrWhiteSpace(redirect))
+                {
+                    throw new InvalidOperationException($"Токен HTTP {code}: redirect without Location.");
+                }
+
+                logger.LogInformation("Токен для {Service}/{Module} / {Env} → redirect", service.Name, moduleName, env);
+                return new FetchTokenResponse(null, redirect);
             }
 
-            var token = ReadAccessToken(body, service.TokenField);
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new InvalidOperationException($"Токен HTTP {code}: {Truncate(body)}");
+            }
+
+            var token = ReadAccessToken(body, auth.TokenField);
             if (string.IsNullOrWhiteSpace(token))
             {
                 throw new InvalidOperationException("В ответе нет accessToken.");
             }
 
-            logger.LogInformation("Токен для {Service} / {Env} получен", service.Name, env);
+            logger.LogInformation("Токен для {Service}/{Module} / {Env} получен", service.Name, moduleName, env);
             return new FetchTokenResponse(token);
         }
         finally
@@ -98,13 +123,33 @@ public sealed class TokenFetchService(
         }
     }
 
-    private (HttpClient Client, bool Dispose) CreateClient(ServiceEntity service)
+    private static ServiceTokenUrl? PickTokenUrl(ServiceEntity service, string env, string region, string module)
     {
-        var handler = ClientCertLocator.CreateHandler(service, configuration, hostEnvironment);
+        ServiceTokenUrl? Match(string moduleFilter) =>
+            service.TokenUrls.FirstOrDefault(u =>
+                string.Equals(u.Environment, env, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(u.RegionCode ?? string.Empty, region, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(u.Module ?? string.Empty, moduleFilter, StringComparison.OrdinalIgnoreCase))
+            ?? service.TokenUrls.FirstOrDefault(u =>
+                string.Equals(u.Environment, env, StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrEmpty(u.RegionCode)
+                && string.Equals(u.Module ?? string.Empty, moduleFilter, StringComparison.OrdinalIgnoreCase));
+
+        if (!string.IsNullOrEmpty(module))
+        {
+            return Match(module) ?? Match(string.Empty);
+        }
+
+        return Match(string.Empty);
+    }
+
+    private (HttpClient Client, bool Dispose) CreateClient(ServiceAuthContext auth, string serviceName)
+    {
+        var handler = ClientCertLocator.CreateHandler(auth, serviceName, configuration, hostEnvironment);
         return (new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) }, true);
     }
 
-    private static Uri ResolveTarget(string tokenUrl, ServiceEntity service, string env, string region)
+    private static Uri ResolveTarget(string tokenUrl, ServiceEntity service, string env, string region, string module)
     {
         var raw = tokenUrl.Trim();
         if (Uri.TryCreate(raw, UriKind.Absolute, out var absolute)
@@ -116,7 +161,12 @@ public sealed class TokenFetchService(
         var baseUrl = service.Urls.FirstOrDefault(u =>
             string.Equals(u.Environment, env, StringComparison.OrdinalIgnoreCase)
             && string.Equals(u.RegionCode ?? string.Empty, region, StringComparison.OrdinalIgnoreCase)
-            && string.IsNullOrEmpty(u.Module))?.BaseUrl;
+            && string.Equals(u.Module ?? string.Empty, module, StringComparison.OrdinalIgnoreCase))?.BaseUrl
+            ?? service.Urls.FirstOrDefault(u =>
+                string.Equals(u.Environment, env, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(u.RegionCode ?? string.Empty, region, StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrEmpty(u.Module))?.BaseUrl;
+
         if (string.IsNullOrWhiteSpace(baseUrl) || !Uri.TryCreate(baseUrl.TrimEnd('/') + "/", UriKind.Absolute, out var parent))
         {
             throw new InvalidOperationException("token_url относительный, но нет base URL сервиса.");

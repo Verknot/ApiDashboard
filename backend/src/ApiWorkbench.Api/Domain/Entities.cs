@@ -127,6 +127,7 @@ public sealed class ServiceTokenUrl
     public int ServiceId { get; set; }
     public string Environment { get; set; } = string.Empty;
     public string RegionCode { get; set; } = string.Empty;
+    public string Module { get; set; } = string.Empty;
     public string Url { get; set; } = string.Empty;
 
     public ServiceEntity Service { get; set; } = null!;
@@ -139,6 +140,7 @@ public sealed class ServiceSwaggerSource
     public string Name { get; set; } = string.Empty;
     public int SortOrder { get; set; }
     public string Url { get; set; } = string.Empty;
+    /// <summary>Swagger download auth: none | basic.</summary>
     public string AuthType { get; set; } = "none";
     public string? VaultPath { get; set; }
     public string? VaultUsernamePath { get; set; }
@@ -146,6 +148,14 @@ public sealed class ServiceSwaggerSource
     public bool VaultBase64 { get; set; }
     public string? BasicUsername { get; set; }
     public string? BasicPassword { get; set; }
+
+    /// <summary>API Send auth override for this module: token | certificate | none. Empty = inherit service.</summary>
+    public string? ApiAuthType { get; set; }
+    public string? CertPath { get; set; }
+    public string? CertBase64 { get; set; }
+    public string? CertVaultPath { get; set; }
+    public string? CertPassword { get; set; }
+    public string? TokenField { get; set; }
 
     public ServiceEntity Service { get; set; } = null!;
 }
@@ -161,6 +171,7 @@ public sealed class EndpointEntity
     public string? OperationId { get; set; }
     public JsonDocument? RequestSchema { get; set; }
     public JsonDocument? ResponseSchema { get; set; }
+    public JsonDocument? Parameters { get; set; }
     public List<string> Tags { get; set; } = [];
     public List<string> UserTags { get; set; } = [];
 

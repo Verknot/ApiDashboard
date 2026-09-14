@@ -1,95 +1,46 @@
+# Catalog for API Workbench.
+# PFX: C:\pult-certs\*.pfx (Docker → /certs)
+
 splunk_url: 'https://splunk.company.com/en-US/app/KESCloud/search?earliest=-15m&latest=now&q=search%20index%3D"*"%20%7C%20search%20ConversationId%3D"#ConversationId#"&display.page.search.mode=smart&dispatch.sample_ratio=1'
+
 services:
+  # One root: UserPortal = token+cert, backend = cert only
   - name: order-service
     description: Управление заказами
     color: "#4CAF50"
     proxy: true
     swagger:
-      url: samples/order-service.json
-      auth: basic
-      vault_username: secret/swagger/order-service-login
-      vault_password: secret/swagger/order-service-password
-      vault_base64: false
+      - name: UserPortal
+        url: http://localhost:5157/userportal/swagger.yml
+        auth: basic
+        username: u1
+        password: "123"
+        environments:
+          dev: http://localhost:5157/userportal
+          stage: https://api.stage.company.com/userportal
+          prod: https://api.prod.company.com/userportal
+        api_auth:
+          type: token
+          token_url:
+            dev: https://auth.dev.company.com/token
+            stage: https://auth.stage.company.com/token
+            prod: https://auth.prod.company.com/token
+          cert_path: client.pfx
+      - name: backend
+        url: https://host/swagger/backend/swagger.json
+        auth: basic
+        username: u1
+        password: "123"
+        environments:
+          dev: https://api.dev.company.com/order
+          stage: https://api.stage.company.com/order
+          prod: https://api.prod.company.com/order
+        api_auth:
+          type: certificate
+          cert_path: client.pfx
     environments:
-      dev: https://api.dev.company.com/order
-      stage: https://api.stage.company.com/order
-      prod: https://api.prod.company.com/order
-    auth:
-      type: token
-
-  - name: CASINOName
-    description: CASINO
-    color: "#FF9800"
-    proxy: true
-    swagger:
-      url: http://localhost:5157/swagger/casino/swagger.json
-      auth: none
-    environments:
-      dev: http://localhost:5157/
-      stage: https://api.stage.company.com/payment
-      prod: https://api.prod.company.com/payment
+      dev: http://localhost:5157/userportal
+      stage: https://api.stage.company.com/userportal
+      prod: https://api.prod.company.com/userportal
     auth:
       type: none
-
-  - name: user-service
-    description: Управление пользователями
-    color: "#2196F3"
-    proxy: true
-    swagger:
-      url: samples/user-service.json
-      auth: basic
-      vault_username: secret/swagger/user-service-login
-      vault_password: secret/swagger/user-service-password
-    environments:
-      dev: https://api.dev.company.com/user
-      stage: https://api.stage.company.com/user
-      prod: https://api.prod.company.com/user
-    auth:
-      type: certificate
-      cert_path: certs/payment-service.pfx
-
-  - name: notify-service
-    description: Региональные уведомления (шаблон URL)
-    color: "#9C27B0"
-    default_region: ru
-    proxy: true
-    swagger:
-      url: samples/notify-service.json
-      auth: none
-    regions:
-      - code: ru
-        label: Россия
-      - code: kz
-        label: Казахстан
-      - code: by
-        label: Беларусь
-    environments:
-      dev: https://notify.dev.{region}.company.com
-      stage: https://notify.stage.{region}.company.com
-      prod: https://notify.prod.{region}.company.com
-    auth:
-      type: token
-
-  - name: geo-catalog-service
-    description: Региональный каталог (явные URL)
-    color: "#00BCD4"
-    default_region: ru
-    proxy: true
-    swagger:
-      url: samples/geo-catalog-service.json
-      auth: none
-    regions:
-      - code: ru
-        label: Россия
-        environments:
-          dev: https://catalog-ru.dev.company.com
-          stage: https://catalog-ru.stage.company.com
-          prod: https://catalog.company.ru
-      - code: kz
-        label: Казахстан
-        environments:
-          dev: https://catalog-kz.dev.company.com
-          stage: https://catalog-kz.stage.company.com
-          prod: https://catalog.company.kz
-    auth:
-      type: token

@@ -661,6 +661,14 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasDefaultValue("")
                         .HasColumnName("region_code");
 
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("")
+                        .HasColumnName("module");
+
                     b.Property<int>("ServiceId")
                         .HasColumnType("integer")
                         .HasColumnName("service_id");
@@ -674,9 +682,9 @@ namespace ApiWorkbench.Api.Data.Migrations
                     b.HasKey("Id")
                         .HasName("pk_service_token_urls");
 
-                    b.HasIndex("ServiceId", "Environment", "RegionCode")
+                    b.HasIndex("ServiceId", "Module", "Environment", "RegionCode")
                         .IsUnique()
-                        .HasDatabaseName("ix_service_token_urls_service_id_environment_region_code");
+                        .HasDatabaseName("ix_service_token_urls_service_id_module_environment_region_code");
 
                     b.ToTable("service_token_urls", (string)null);
                 });
@@ -707,6 +715,35 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasMaxLength(255)
                         .HasColumnType("character varying(255)")
                         .HasColumnName("basic_username");
+
+                    b.Property<string>("ApiAuthType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("api_auth_type");
+
+                    b.Property<string>("CertPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cert_path");
+
+                    b.Property<string>("CertBase64")
+                        .HasColumnType("text")
+                        .HasColumnName("cert_base64");
+
+                    b.Property<string>("CertVaultPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cert_vault_path");
+
+                    b.Property<string>("CertPassword")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cert_password");
+
+                    b.Property<string>("TokenField")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("token_field");
 
                     b.Property<string>("Name")
                         .IsRequired()

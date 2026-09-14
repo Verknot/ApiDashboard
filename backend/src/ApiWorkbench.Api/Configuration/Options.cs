@@ -33,6 +33,9 @@ public sealed class SwaggerYaml
     public bool VaultBase64 { get; set; }
     public Dictionary<string, string>? Environments { get; set; }
     public SwaggerVaultYaml? Vault { get; set; }
+
+    /// <summary>API Send auth for this swagger module (overrides service auth).</summary>
+    public AuthYaml? ApiAuth { get; set; }
 }
 
 public sealed class SwaggerVaultYaml

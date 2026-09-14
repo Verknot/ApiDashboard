@@ -44,7 +44,8 @@ services:
     ports:
       - "5080:8080"
     volumes:
-      - ./config:/app/config:ro
+      # Local: read-write so Admin can Save YAML. In K8s keep ConfigMap read-only.
+      - ./config:/app/config
       # On each Windows host: create C:\pult-certs and put *.pfx there
       - C:/pult-certs:/certs:ro
       - C:/pult-certs:/app/certs:ro

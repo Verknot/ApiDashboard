@@ -112,8 +112,9 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Environment).HasMaxLength(20).IsRequired();
             entity.Property(x => x.RegionCode).HasMaxLength(50).HasDefaultValue(string.Empty);
+            entity.Property(x => x.Module).HasMaxLength(100).HasDefaultValue(string.Empty);
             entity.Property(x => x.Url).HasMaxLength(500).IsRequired();
-            entity.HasIndex(x => new { x.ServiceId, x.Environment, x.RegionCode }).IsUnique();
+            entity.HasIndex(x => new { x.ServiceId, x.Module, x.Environment, x.RegionCode }).IsUnique();
             entity.HasOne(x => x.Service)
                 .WithMany(x => x.TokenUrls)
                 .HasForeignKey(x => x.ServiceId)
@@ -133,6 +134,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.BasicUsername).HasMaxLength(255);
             entity.Property(x => x.BasicPassword).HasMaxLength(500);
             entity.Property(x => x.VaultBase64).HasDefaultValue(false);
+            entity.Property(x => x.ApiAuthType).HasMaxLength(20);
+            entity.Property(x => x.CertPath).HasMaxLength(500);
+            entity.Property(x => x.CertBase64).HasColumnType("text");
+            entity.Property(x => x.CertVaultPath).HasMaxLength(500);
+            entity.Property(x => x.CertPassword).HasMaxLength(500);
+            entity.Property(x => x.TokenField).HasMaxLength(100);
             entity.HasIndex(x => new { x.ServiceId, x.Name }).IsUnique();
             entity.HasOne(x => x.Service)
                 .WithMany(x => x.SwaggerSources)
@@ -205,6 +212,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.OperationId).HasMaxLength(100);
             entity.Property(x => x.RequestSchema).HasColumnType("jsonb");
             entity.Property(x => x.ResponseSchema).HasColumnType("jsonb");
+            entity.Property(x => x.Parameters).HasColumnType("jsonb");
             entity.Property(x => x.Tags).HasColumnType("text[]");
             entity.Property(x => x.UserTags).HasColumnType("text[]").HasDefaultValueSql("'{}'");
             entity.HasIndex(x => new { x.ServiceId, x.Module, x.Path, x.Method }).IsUnique();

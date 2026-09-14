@@ -48,11 +48,37 @@ type WorkbenchState = {
   setRegion: (serviceId: number, region: string) => void
   rememberDefaultRegion: (service: CatalogService) => void
   setPendingReplay: (item: HistoryItem | null) => void
-  setServiceToken: (serviceId: number, environment: EnvironmentName, region: string | undefined, token: string) => void
+  setServiceToken: (
+    serviceId: number,
+    environment: EnvironmentName,
+    region: string | undefined,
+    token: string,
+    module?: string,
+  ) => void
 }
 
-export function tokenScopeKey(serviceId: number, environment: string, region?: string): string {
-  return `${serviceId}:${environment}:${region ?? ''}`
+export function tokenScopeKey(
+  serviceId: number,
+  environment: string,
+  region?: string,
+  module?: string,
+): string {
+  return `${serviceId}:${environment}:${region ?? ''}:${module ?? ''}`
+}
+
+export function resolveModuleAuth(service: CatalogService, module?: string | null) {
+  const name = (module ?? '').trim()
+  if (name) {
+    const hit = service.modules.find((item) => item.name === name)
+    if (hit) {
+      return hit
+    }
+  }
+  return {
+    name: '',
+    authType: service.authType,
+    canFetchToken: service.canFetchToken,
+  }
 }
 
 function endpointTabId(serviceId: number, endpointId: number): string {
@@ -97,8 +123,6 @@ export const useWorkbench = create<WorkbenchState>()(
       selectEndpoint: (serviceId, endpointId) => {
         const id = endpointTabId(serviceId, endpointId)
         const existing = get().tabs.find((tab) => tab.id === id)
-        const scope = tokenScopeKey(serviceId, get().environment, get().regionByServiceId[serviceId])
-        const scopedToken = get().tokenByScope[scope] ?? ''
         const tabs = existing
           ? get().tabs
           : [
@@ -110,7 +134,7 @@ export const useWorkbench = create<WorkbenchState>()(
                 endpointId,
                 method: 'GET',
                 body: '',
-                token: scopedToken,
+                token: '',
                 proxy: true,
               }),
             ]
@@ -183,11 +207,10 @@ export const useWorkbench = create<WorkbenchState>()(
         set({
           tabs: get().tabs.map((tab) => (tab.id === id && tab.kind === 'free' ? { ...tab, ...patch } : tab)),
         }),
-      setServiceToken: (serviceId, environment, region, token) => {
-        const key = tokenScopeKey(serviceId, environment, region)
+      setServiceToken: (serviceId, environment, region, token, module) => {
+        const key = tokenScopeKey(serviceId, environment, region, module)
         set({
           tokenByScope: { ...get().tokenByScope, [key]: token },
-          tabs: get().tabs.map((tab) => (tab.serviceId === serviceId ? { ...tab, token } : tab)),
         })
       },
       setRegion: (serviceId, region) =>

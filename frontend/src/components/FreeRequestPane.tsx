@@ -5,6 +5,7 @@ import { prettyJson } from '../api/schema'
 import type { HistoryItem } from '../api/types'
 import { IconSend } from '../icons'
 import { sendModeHint, useSession, useWorkbench } from '../store/workbench'
+import { JsonResponseViewer } from './JsonResponseViewer'
 import { ResponseHeaderList } from './ResponseHeaderList'
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
@@ -278,7 +279,10 @@ export function FreeRequestPane({ tabId }: Props) {
             {result.error ? <span>network</span> : null}
           </div>
           {Object.keys(result.headers).length > 0 ? <ResponseHeaderList headers={result.headers} /> : null}
-          <pre>{result.body || ' '}</pre>
+          <JsonResponseViewer
+            value={result.body || ' '}
+            onChange={(next) => setResult({ ...result, body: next })}
+          />
         </section>
       ) : null}
 
