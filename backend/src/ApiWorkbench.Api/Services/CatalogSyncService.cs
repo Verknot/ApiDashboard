@@ -38,7 +38,6 @@ public sealed class CatalogSyncService(
 {
     private static readonly IDeserializer Yaml = new DeserializerBuilder()
         .WithNamingConvention(UnderscoredNamingConvention.Instance)
-        .WithTypeConverter(new RegionYamlListConverter())
         .WithTypeConverter(new StringOrEnvMapConverter())
         .IgnoreUnmatchedProperties()
         .Build();
@@ -182,13 +181,13 @@ public sealed class CatalogSyncService(
             throw new InvalidOperationException($"У сервиса '{entry.Name}' укажите portals (UserPortal, BackOffice, …).");
         }
 
-        var regions = (entry.Regions?.Items ?? [])
-            .Where(r => !string.IsNullOrWhiteSpace(r.Code))
-            .Select((r, i) => new ResolvedRegion(
-                r.Code.Trim().ToLowerInvariant(),
-                string.IsNullOrWhiteSpace(r.Label) ? r.Code.Trim().ToUpperInvariant() : r.Label.Trim(),
-                i,
-                r.Environments))
+        var regions = (entry.Regions ?? [])
+            .Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select((code, i) =>
+            {
+                var normalized = code.Trim().ToLowerInvariant();
+                return new ResolvedRegion(normalized, normalized.ToUpperInvariant(), i);
+            })
             .ToList();
 
         var isRegional = regions.Count > 0;
@@ -344,7 +343,7 @@ public sealed class CatalogSyncService(
             FirstNonEmpty(entry.SplunkUrl, defaultSplunkUrl),
             isRegional,
             defaultRegion,
-            regions.Select(r => new ResolvedRegion(r.Code, r.Label, r.SortOrder, null)).ToList(),
+            regions.Select(r => new ResolvedRegion(r.Code, r.Label, r.SortOrder)).ToList(),
             urls,
             swaggerSpecs,
             tokenAuth);
@@ -410,17 +409,6 @@ public sealed class CatalogSyncService(
             {
                 var template = LookupEnv(urlsMap, env)
                                ?? throw new InvalidOperationException($"У portal '{module}' нет URL для среды '{env}'.");
-                if (region.Environments is not null)
-                {
-                    var explicitHit = region.Environments.FirstOrDefault(kv =>
-                        ServiceEnvironments.Normalize(kv.Key) == env);
-                    if (!string.IsNullOrWhiteSpace(explicitHit.Value))
-                    {
-                        urls.Add(new ResolvedUrl(env, region.Code, explicitHit.Value.Trim(), module));
-                        continue;
-                    }
-                }
-
                 if (!template.Contains("{region}", StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
@@ -684,11 +672,7 @@ public sealed class CatalogSyncService(
         string? CertPassword,
         ResolvedTokenAuth Token);
 
-    private sealed record ResolvedRegion(
-        string Code,
-        string Label,
-        int SortOrder,
-        Dictionary<string, string>? Environments);
+    private sealed record ResolvedRegion(string Code, string Label, int SortOrder);
 
     private sealed record ResolvedUrl(string Environment, string RegionCode, string BaseUrl, string Module);
 

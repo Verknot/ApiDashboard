@@ -15,10 +15,10 @@ public sealed class ServiceYamlEntry
     public string? SplunkUrl { get; set; }
     public string? DefaultRegion { get; set; }
     public List<PortalYaml>? Portals { get; set; }
-    public RegionYamlList? Regions { get; set; }
-}
 
-/// <summary>One OpenAPI surface under a service (UserPortal, BackOffice, BackendPortal…).</summary>
+    /// <summary>Region codes, e.g. [eu, tr, br, mx].</summary>
+    public List<string>? Regions { get; set; }
+}
 public sealed class PortalYaml
 {
     public string Name { get; set; } = string.Empty;

@@ -18,6 +18,7 @@ services:
             password: "123"
         urls:
           dev: http://localhost:5157/userportal
+          stage: http://localhost:5157/userportal
           qa: https://api.qa.company.com/userportal
         auth:
           type: token

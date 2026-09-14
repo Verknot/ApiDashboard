@@ -502,9 +502,9 @@ body.is-row-resizing {
   gap: 6px;
   width: 100%;
   margin: 8px 0 2px;
-  padding: 4px 8px 4px 28px;
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  padding: 5px 8px 5px 28px;
+  font-size: 14px;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--mute);
   background: transparent;
