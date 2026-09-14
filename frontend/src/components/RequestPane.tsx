@@ -15,6 +15,7 @@ import {
 import { applyParametersToUrl, useEndpointParameters } from '../api/parameters'
 import { isBlankRequestBody, prettyJson, seedRequestBody } from '../api/schema'
 import type { CatalogService, HistoryItem, RequestTemplate, ServiceEndpoint } from '../api/types'
+import { normalizeResponseHeaders } from '../api/types'
 import {
   IconCopy,
   IconDeviceFloppy,
@@ -73,8 +74,8 @@ function stringMap(value: Record<string, unknown> | null | undefined): Record<st
 }
 
 export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
+  const [sendViaProxy, setSendViaProxy] = useState(service.proxy)
   const me = useSession((s) => s.me)
-  const sendViaProxy = service.proxy
   const environment = useWorkbench((s) => s.environment)
   const regionByServiceId = useWorkbench((s) => s.regionByServiceId)
   const setTabBody = useWorkbench((s) => s.setTabBody)
@@ -116,6 +117,10 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
 
   const body = draftBody
   const token = (tokenByScope ?? {})[tokenScopeKey(service.id, environment, region, endpoint.module)] ?? ''
+
+  useEffect(() => {
+    setSendViaProxy(service.proxy)
+  }, [service.id, service.proxy])
 
   useEffect(() => {
     openTab(service.id, endpoint.id)
@@ -198,8 +203,7 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
         } catch {
           pretty = relay.body
         }
-        const responseHeaders =
-          relay.headers && typeof relay.headers === 'object' ? { ...relay.headers } : {}
+        const responseHeaders = normalizeResponseHeaders(relay.headers)
         setResult({
           status: relay.status,
           timeMs: relay.timeMs,
@@ -336,9 +340,17 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
       <label className="field-label">URL</label>
       <input className="url-input" value={url} onChange={(event) => setUrl(event.target.value)} />
       <p className="hint-line send-hint">{sendModeHint(sendViaProxy, moduleAuth.authType, url)}</p>
+      <div className="pills" style={{ margin: '10px 0 14px', width: 'fit-content' }}>
+        <button type="button" className={`pill${sendViaProxy ? ' on' : ''}`} onClick={() => setSendViaProxy(true)}>
+          proxy
+        </button>
+        <button type="button" className={`pill${!sendViaProxy ? ' on' : ''}`} onClick={() => setSendViaProxy(false)}>
+          browser
+        </button>
+      </div>
       {!sendViaProxy ? (
         <p className="hint-line">
-          Browser mode: CORS often exposes only content-type / content-length. Use proxy to see all response headers.
+          Browser mode: CORS often exposes only content-type / content-length. Use proxy for full response headers.
         </p>
       ) : null}
 
@@ -553,7 +565,11 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
             </button>
           </div>
           {Object.keys(result.headers).length > 0 ? (
-            <ResponseHeaderList headers={result.headers} splunkUrl={service.splunkUrl} />
+            <ResponseHeaderList
+              headers={result.headers}
+              splunkUrl={service.splunkUrl}
+              mode={sendViaProxy ? 'proxy' : 'browser'}
+            />
           ) : null}
           <JsonResponseViewer
             value={result.body || ' '}

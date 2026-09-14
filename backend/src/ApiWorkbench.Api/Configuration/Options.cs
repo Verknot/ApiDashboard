@@ -102,6 +102,18 @@ public sealed class VaultOptions
     /// Example: secret/pult/db#connectionString
     /// </summary>
     public string? ConnectionStringPath { get; set; }
+
+    /// <summary>
+    /// Optional Vault KV path for Jwt:Key when Jwt:Key is empty.
+    /// Example: secret/pult/app#jwtKey
+    /// </summary>
+    public string? JwtKeyPath { get; set; }
+
+    /// <summary>
+    /// Optional Vault KV path for Seed:AdminPassword when Seed:AdminPassword is empty.
+    /// Example: secret/pult/app#adminPassword
+    /// </summary>
+    public string? SeedAdminPasswordPath { get; set; }
 }
 
 public static class AuthCookieNames

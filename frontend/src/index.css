@@ -231,10 +231,11 @@ textarea {
 }
 
 .workbench {
-  display: grid;
-  grid-template-columns: minmax(240px, 300px) 1fr;
+  display: flex;
+  align-items: stretch;
   gap: 0;
-  min-height: calc(100dvh - 140px);
+  height: calc(100dvh - 150px);
+  min-height: 420px;
   border: 1px solid var(--line);
   border-radius: 16px;
   overflow: hidden;
@@ -243,15 +244,76 @@ textarea {
 
 @media (max-width: 767px) {
   .workbench {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .split-handle {
+    display: none;
+  }
+
+  .catalog {
+    width: 100% !important;
+    max-height: 42vh;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
   }
 }
 
 .catalog {
-  border-right: 1px solid var(--line);
+  width: var(--catalog-width, 300px);
+  flex: 0 0 var(--catalog-width, 300px);
+  border-right: 0;
   padding: 16px 14px;
   min-height: 0;
   overflow: auto;
+}
+
+.split-handle {
+  flex: 0 0 6px;
+  width: 6px;
+  cursor: col-resize;
+  background: var(--line);
+  position: relative;
+  z-index: 2;
+  transition: background 0.15s var(--ease);
+}
+
+.split-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0 -4px;
+}
+
+.split-handle:hover,
+body.is-col-resizing .split-handle {
+  background: var(--accent, #7a8f6a);
+}
+
+body.is-col-resizing {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
+body.is-row-resizing {
+  cursor: ns-resize !important;
+  user-select: none !important;
+}
+
+.pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: auto;
+}
+
+.pane-body {
+  padding: 22px 22px 28px;
+  flex: 1;
+  min-height: 0;
 }
 
 .catalog-head {
@@ -574,12 +636,6 @@ textarea {
   color: #e8b4aa;
 }
 
-.pane {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-}
-
 .pane-bar {
   display: flex;
   align-items: center;
@@ -588,11 +644,7 @@ textarea {
   flex-wrap: wrap;
   padding: 12px 18px;
   border-bottom: 1px solid var(--line);
-}
-
-.pane-body {
-  padding: 22px 22px 28px;
-  flex: 1;
+  flex-shrink: 0;
 }
 
 .pills {
@@ -1265,7 +1317,7 @@ textarea {
 .response-card {
   border: 1px solid var(--line);
   border-radius: 12px;
-  overflow: hidden;
+  overflow: visible;
   background: var(--canvas);
 }
 
@@ -1284,6 +1336,8 @@ textarea {
 .response-headers {
   padding: 12px 14px 8px;
   border-bottom: 1px solid var(--line);
+  max-height: 220px;
+  overflow: auto;
 }
 
 .response-header-row {
@@ -1437,8 +1491,10 @@ textarea {
 
 .json-response-editor {
   position: relative;
-  min-height: 180px;
-  max-height: 420px;
+  width: 100%;
+  min-height: 160px;
+  overflow: hidden;
+  background: var(--canvas);
 }
 
 .json-response-highlight,
@@ -1452,9 +1508,9 @@ textarea {
   word-break: break-word;
   box-sizing: border-box;
   width: 100%;
-  min-height: 180px;
-  max-height: 420px;
+  height: 100%;
   overflow: auto;
+  border: 0;
 }
 
 .json-response-highlight {
@@ -1462,16 +1518,41 @@ textarea {
   inset: 0;
   pointer-events: none;
   color: var(--ink);
+  z-index: 0;
 }
 
 .json-response-input {
   position: relative;
+  z-index: 1;
   background: transparent;
   color: transparent;
   caret-color: var(--ink);
-  border: 0;
-  resize: vertical;
+  resize: none;
   outline: none;
+}
+
+.json-response-grip {
+  height: 8px;
+  cursor: ns-resize;
+  background: linear-gradient(to bottom, transparent, rgba(255, 255, 255, 0.04));
+  border-top: 1px solid var(--line);
+  position: relative;
+}
+
+.json-response-grip::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 2px;
+  width: 36px;
+  height: 3px;
+  margin-left: -18px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.18);
+}
+
+body.is-row-resizing .json-response-grip {
+  background: rgba(122, 143, 106, 0.2);
 }
 
 .json-key {

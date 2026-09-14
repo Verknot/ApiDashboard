@@ -15,7 +15,10 @@ services:
       timeout: 5s
       retries: 10
 
+  # Optional local Vault only: docker compose --profile with-vault up
+  # On company environments point Vault__Address at the existing Vault — do not deploy this service.
   vault:
+    profiles: ["with-vault"]
     image: hashicorp/vault:1.15
     cap_add:
       - IPC_LOCK
@@ -35,8 +38,9 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__Default: Host=postgres;Port=5432;Database=api_workbench;Username=workbench;Password=workbench
       Jwt__Key: sprint0-dev-signing-key-change-me-32ch
-      Vault__Address: http://vault:8200
-      Vault__Token: root
+      # Leave empty or set to company Vault URL; local compose Vault is optional (profile with-vault)
+      Vault__Address: ${Vault__Address:-}
+      Vault__Token: ${Vault__Token:-}
       ServicesConfigPath: /app/config/services.yaml
       Cors__Origins__0: http://localhost:8088
       Seed__AdminEmail: admin@local
@@ -52,8 +56,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      vault:
-        condition: service_started
 
   web:
     build:

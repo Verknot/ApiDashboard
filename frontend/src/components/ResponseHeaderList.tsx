@@ -4,9 +4,10 @@ import { IconExternalLink } from '../icons'
 type Props = {
   headers: Record<string, string>
   splunkUrl?: string | null
+  mode?: 'proxy' | 'browser'
 }
 
-export function ResponseHeaderList({ headers, splunkUrl }: Props) {
+export function ResponseHeaderList({ headers, splunkUrl, mode }: Props) {
   const rows = Object.entries(headers).sort(([a], [b]) => a.localeCompare(b))
   if (rows.length === 0) {
     return null
@@ -15,8 +16,17 @@ export function ResponseHeaderList({ headers, splunkUrl }: Props) {
   return (
     <div className="response-headers">
       <p className="field-label" style={{ margin: '0 0 8px' }}>
-        Headers
+        Response headers
+        <span className="meta" style={{ marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
+          {rows.length}
+        </span>
       </p>
+      {mode === 'browser' && rows.length <= 3 ? (
+        <p className="hint-line" style={{ marginTop: 0 }}>
+          Browser mode shows only CORS-exposed headers (often just content-type / content-length). Switch to{' '}
+          <strong>proxy</strong> to see date, server, x-conversation-id, traceparent, etc.
+        </p>
+      ) : null}
       {rows.map(([name, value]) => (
         <HeaderRow key={name} name={name} value={value} splunkUrl={splunkUrl} />
       ))}

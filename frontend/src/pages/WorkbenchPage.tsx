@@ -5,6 +5,7 @@ import type { CatalogService, ServiceEndpoint } from '../api/types'
 import { EnvRegionBar } from '../components/EnvRegionBar'
 import { FreeRequestPane } from '../components/FreeRequestPane'
 import { RequestPane } from '../components/RequestPane'
+import { ResizableWorkbench } from '../components/ResizableWorkbench'
 import { ServiceTree } from '../components/ServiceTree'
 import { IconPlus, IconRoute, IconTerminal, IconX } from '../icons'
 import { useSession, useWorkbench } from '../store/workbench'
@@ -167,84 +168,86 @@ export function WorkbenchPage() {
           </button>
         </div>
       ) : null}
-      <div className="workbench">
-        <aside className="catalog">
+      <ResizableWorkbench
+        left={
           <ServiceTree
             services={services}
             loading={loading}
             onOpenFree={canSend ? () => openFreeTab() : undefined}
           />
-        </aside>
-        <section className="pane">
-          {activeTab?.kind === 'free' ? (
-            <div className="pane-bar">
-              <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-                <span className="meta">free request</span>
-                <span className="meta">{activeTab.proxy ? 'proxy' : 'browser'}</span>
-              </div>
-              <button type="button" className="btn btn-ghost btn-compact" onClick={() => openFreeTab()}>
-                <IconPlus size={14} />
-                New
-              </button>
-            </div>
-          ) : (
-            <EnvRegionBar service={selected} />
-          )}
-          <div className="pane-body">
+        }
+        right={
+          <>
             {activeTab?.kind === 'free' ? (
-              <FreeRequestPane key={activeTab.id} tabId={activeTab.id} />
-            ) : selected && endpoint ? (
-              <RequestPane
-                key={endpoint.id}
-                service={selected}
-                endpoint={endpoint}
-                onEndpointPatch={patchEndpoint}
-              />
-            ) : selected ? (
-              <>
-                <div className="meta-row">
-                  <span className="meta">{selected.authType}</span>
-                  {selected.modules.length > 0 ? (
-                    <span className="meta" title={selected.modules.map((m) => `${m.name}:${m.authType}`).join(', ')}>
-                      modules: {selected.modules.map((m) => m.authType).join(' / ')}
-                    </span>
-                  ) : null}
-                  {selected.isRegional ? <span className="meta">regional</span> : null}
-                  <span className="meta">{selected.proxy ? 'proxy' : 'browser'}</span>
+              <div className="pane-bar">
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <span className="meta">free request</span>
+                  <span className="meta">{activeTab.proxy ? 'proxy' : 'browser'}</span>
                 </div>
-                <p style={{ color: 'var(--mute)', maxWidth: '58ch', lineHeight: 1.55, marginTop: 0 }}>
-                  {selected.endpointCount
-                    ? 'Pick an endpoint on the left — a tab with the form will open.'
-                    : isAdmin
-                      ? 'Contract is empty. In Admin click Refresh all.'
-                      : 'Contract is empty. Ask an admin to refresh swagger.'}
-                </p>
-              </>
-            ) : (
-              <div className="empty">
-                <IconTerminal size={32} />
-                <h2>Select a service</h2>
-                <p>Tree: service → tag → method and path. Or open Free request and paste any URL.</p>
-                <p style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <IconRoute size={16} />
-                  Double-click also opens a tab
-                </p>
-                {canSend ? (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    style={{ width: 'auto', marginTop: 16, paddingInline: 16 }}
-                    onClick={() => openFreeTab()}
-                  >
-                    <IconPlus size={16} />
-                    Free request
-                  </button>
-                ) : null}
+                <button type="button" className="btn btn-ghost btn-compact" onClick={() => openFreeTab()}>
+                  <IconPlus size={14} />
+                  New
+                </button>
               </div>
+            ) : (
+              <EnvRegionBar service={selected} />
             )}
-          </div>
-        </section>
-      </div>
+            <div className="pane-body">
+              {activeTab?.kind === 'free' ? (
+                <FreeRequestPane key={activeTab.id} tabId={activeTab.id} />
+              ) : selected && endpoint ? (
+                <RequestPane
+                  key={endpoint.id}
+                  service={selected}
+                  endpoint={endpoint}
+                  onEndpointPatch={patchEndpoint}
+                />
+              ) : selected ? (
+                <>
+                  <div className="meta-row">
+                    <span className="meta">{selected.authType}</span>
+                    {selected.modules.length > 0 ? (
+                      <span className="meta" title={selected.modules.map((m) => `${m.name}:${m.authType}`).join(', ')}>
+                        modules: {selected.modules.map((m) => m.authType).join(' / ')}
+                      </span>
+                    ) : null}
+                    {selected.isRegional ? <span className="meta">regional</span> : null}
+                    <span className="meta">{selected.proxy ? 'proxy' : 'browser'}</span>
+                  </div>
+                  <p style={{ color: 'var(--mute)', maxWidth: '58ch', lineHeight: 1.55, marginTop: 0 }}>
+                    {selected.endpointCount
+                      ? 'Pick an endpoint on the left — a tab with the form will open.'
+                      : isAdmin
+                        ? 'Contract is empty. In Admin click Refresh all.'
+                        : 'Contract is empty. Ask an admin to refresh swagger.'}
+                  </p>
+                </>
+              ) : (
+                <div className="empty">
+                  <IconTerminal size={32} />
+                  <h2>Select a service</h2>
+                  <p>Tree: service → tag → method and path. Or open Free request and paste any URL.</p>
+                  <p style={{ marginTop: 12, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <IconRoute size={16} />
+                    Double-click also opens a tab
+                  </p>
+                  {canSend ? (
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ width: 'auto', marginTop: 16, paddingInline: 16 }}
+                      onClick={() => openFreeTab()}
+                    >
+                      <IconPlus size={16} />
+                      Free request
+                    </button>
+                  ) : null}
+                </div>
+              )}
+            </div>
+          </>
+        }
+      />
     </>
   )
 }

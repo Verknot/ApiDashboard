@@ -100,7 +100,17 @@ public sealed class ProxySendService(
 
         var module = service is null ? null : ServiceAuthResolver.MatchModuleByUrl(service, target);
         var auth = service is null ? null : ServiceAuthResolver.Resolve(service, module);
-        var (client, disposeClient) = CreateClient(service, auth);
+        HttpClient client;
+        bool disposeClient;
+        try
+        {
+            (client, disposeClient) = CreateClient(service, auth);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return new ProxySendResponse(null, 0, ex.Message, ex.Message, []);
+        }
+
         var clock = Stopwatch.StartNew();
         try
         {
@@ -117,7 +127,8 @@ public sealed class ProxySendService(
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or AuthenticationException)
         {
             clock.Stop();
-            return new ProxySendResponse(null, (int)clock.ElapsedMilliseconds, ex.Message, ex.Message, new Dictionary<string, string>());
+            var detail = DescribeSendFailure(ex, service, auth);
+            return new ProxySendResponse(null, (int)clock.ElapsedMilliseconds, detail, detail, []);
         }
         finally
         {
@@ -130,13 +141,44 @@ public sealed class ProxySendService(
 
     private (HttpClient Client, bool Dispose) CreateClient(ServiceEntity? service, ServiceAuthContext? auth)
     {
-        if (service is null || auth is null || !auth.NeedsClientCertificate)
+        if (service is null || auth is null)
+        {
+            return (httpClientFactory.CreateClient("relay"), false);
+        }
+
+        if (string.Equals(auth.AuthType, "certificate", StringComparison.OrdinalIgnoreCase)
+            && !auth.HasClientCertificateMaterial)
+        {
+            throw new InvalidOperationException(
+                $"Service '{service.Name}'{(string.IsNullOrEmpty(auth.Module) ? "" : "/" + auth.Module)} needs a client certificate: set api_auth.cert_path / cert_base64 / cert_vault (PFX in C:\\pult-certs).");
+        }
+
+        if (!auth.NeedsClientCertificate)
         {
             return (httpClientFactory.CreateClient("relay"), false);
         }
 
         var handler = ClientCertLocator.CreateHandler(auth, service.Name, configuration, hostEnvironment);
         return (new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(60) }, true);
+    }
+
+    private static string DescribeSendFailure(Exception ex, ServiceEntity? service, ServiceAuthContext? auth)
+    {
+        var text = ex.ToString();
+        if (text.Contains("certificate required", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("tlsv13 alert certificate required", StringComparison.OrdinalIgnoreCase)
+            || text.Contains("alert certificate required", StringComparison.OrdinalIgnoreCase))
+        {
+            var where = service is null
+                ? "this URL"
+                : $"'{service.Name}'{(auth is null || string.IsNullOrEmpty(auth.Module) ? "" : "/" + auth.Module)}";
+            var hasCert = auth?.HasClientCertificateMaterial == true;
+            return hasCert
+                ? $"TLS: server requires a client certificate for {where}, but the presented PFX was rejected (wrong cert, expired, or password). Check C:\\pult-certs and api_auth.cert_path / cert_password."
+                : $"TLS: server requires a client certificate (mTLS) for {where}. Set api_auth.type: certificate (or token) and api_auth.cert_path: your.pfx in C:\\pult-certs, then From disk / reload config.";
+        }
+
+        return ex.GetBaseException().Message;
     }
 
     private static bool HasBody(string method) => method is not ("GET" or "HEAD");
@@ -161,38 +203,68 @@ public sealed class ProxySendService(
         return false;
     }
 
-    private static Dictionary<string, string> CollectHeaders(HttpResponseMessage response)
+    private static List<ResponseHeaderItem> CollectHeaders(HttpResponseMessage response)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        void Add(IEnumerable<KeyValuePair<string, IEnumerable<string>>> headers)
+
+        void AddPair(string name, string value)
         {
-            foreach (var header in headers)
+            if (string.IsNullOrWhiteSpace(name))
             {
-                var value = string.Join(", ", header.Value);
-                if (map.TryGetValue(header.Key, out var existing))
+                return;
+            }
+
+            if (map.TryGetValue(name, out var existing) && !string.IsNullOrEmpty(existing))
+            {
+                if (!existing.Contains(value, StringComparison.Ordinal))
                 {
-                    map[header.Key] = $"{existing}, {value}";
+                    map[name] = $"{existing}, {value}";
                 }
-                else
-                {
-                    map[header.Key] = value;
-                }
+            }
+            else
+            {
+                map[name] = value;
             }
         }
 
-        Add(response.Headers);
-        Add(response.Content.Headers);
+        void AddHeaders(System.Net.Http.Headers.HttpHeaders headers)
+        {
+            foreach (var header in headers)
+            {
+                try
+                {
+                    AddPair(header.Key, string.Join(", ", header.Value));
+                }
+                catch (InvalidOperationException)
+                {
+                    // Skip malformed typed headers; NonValidated below still captures raw values.
+                }
+            }
+
+            foreach (var header in headers.NonValidated)
+            {
+                AddPair(header.Key, header.Value.ToString());
+            }
+        }
+
+        AddHeaders(response.Headers);
+        if (response.Content is not null)
+        {
+            AddHeaders(response.Content.Headers);
+        }
+
         try
         {
-            Add(response.TrailingHeaders);
+            AddHeaders(response.TrailingHeaders);
         }
         catch (NotSupportedException)
         {
-            // Some handlers do not support trailing headers.
         }
 
-        // Plain dictionary: OrdinalIgnoreCase comparer can confuse some JSON serializers.
-        return new Dictionary<string, string>(map, StringComparer.Ordinal);
+        return map
+            .OrderBy(pair => pair.Key, StringComparer.OrdinalIgnoreCase)
+            .Select(pair => new ResponseHeaderItem(pair.Key, pair.Value))
+            .ToList();
     }
 
     private static string Truncate(string body, int maxBytes)

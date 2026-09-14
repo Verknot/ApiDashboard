@@ -138,12 +138,14 @@ public sealed record ProxySendRequest(
     Dictionary<string, string>? Headers,
     string? Body);
 
+public sealed record ResponseHeaderItem(string Name, string Value);
+
 public sealed record ProxySendResponse(
     int? Status,
     int TimeMs,
     string Body,
     string? Error,
-    IReadOnlyDictionary<string, string> Headers);
+    IReadOnlyList<ResponseHeaderItem> Headers);
 
 public sealed record AdminUserResponse(
     int Id,

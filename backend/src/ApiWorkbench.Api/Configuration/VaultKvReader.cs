@@ -128,6 +128,16 @@ internal static class ConnectionStringResolver
         "connectionString", "connection_string", "ConnectionString", "value", "default"
     ];
 
+    private static readonly string[] JwtKeyKeys =
+    [
+        "jwtKey", "jwt_key", "JwtKey", "key", "value"
+    ];
+
+    private static readonly string[] AdminPasswordKeys =
+    [
+        "adminPassword", "admin_password", "password", "value"
+    ];
+
     public static async Task<string> ResolveAsync(IConfiguration configuration, CancellationToken cancellationToken = default)
     {
         var configured = configuration.GetConnectionString("Default");
@@ -144,5 +154,35 @@ internal static class ConnectionStringResolver
         }
 
         return await VaultKvReader.ReadStringAsync(configuration, vaultPath, ConnectionStringKeys, cancellationToken);
+    }
+
+    /// <summary>
+    /// Fills ConnectionStrings / Jwt / Seed from Vault when local config values are empty.
+    /// Uses the existing company Vault — no embedded Vault required.
+    /// </summary>
+    public static async Task ApplyVaultSecretsAsync(IConfiguration configuration, CancellationToken cancellationToken = default)
+    {
+        var connectionString = await ResolveAsync(configuration, cancellationToken);
+        configuration["ConnectionStrings:Default"] = connectionString;
+
+        if (string.IsNullOrWhiteSpace(configuration["Jwt:Key"]))
+        {
+            var jwtPath = configuration["Vault:JwtKeyPath"]?.Trim();
+            if (!string.IsNullOrWhiteSpace(jwtPath))
+            {
+                configuration["Jwt:Key"] = await VaultKvReader.ReadStringAsync(
+                    configuration, jwtPath, JwtKeyKeys, cancellationToken);
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(configuration["Seed:AdminPassword"]))
+        {
+            var seedPath = configuration["Vault:SeedAdminPasswordPath"]?.Trim();
+            if (!string.IsNullOrWhiteSpace(seedPath))
+            {
+                configuration["Seed:AdminPassword"] = await VaultKvReader.ReadStringAsync(
+                    configuration, seedPath, AdminPasswordKeys, cancellationToken);
+            }
+        }
     }
 }

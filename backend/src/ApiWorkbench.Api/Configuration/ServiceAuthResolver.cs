@@ -62,9 +62,7 @@ internal static class ServiceAuthResolver
                 continue;
             }
 
-            if (!string.Equals(allowed.Scheme, target.Scheme, StringComparison.OrdinalIgnoreCase)
-                || !string.Equals(allowed.IdnHost, target.IdnHost, StringComparison.OrdinalIgnoreCase)
-                || allowed.Port != target.Port)
+            if (!IsUnderBase(target, allowed))
             {
                 continue;
             }
@@ -80,6 +78,26 @@ internal static class ServiceAuthResolver
         }
 
         return bestModule;
+    }
+
+    private static bool IsUnderBase(Uri target, Uri allowed)
+    {
+        if (!string.Equals(allowed.Scheme, target.Scheme, StringComparison.OrdinalIgnoreCase)
+            || !string.Equals(allowed.IdnHost, target.IdnHost, StringComparison.OrdinalIgnoreCase)
+            || allowed.Port != target.Port)
+        {
+            return false;
+        }
+
+        var basePath = allowed.AbsolutePath.TrimEnd('/');
+        if (string.IsNullOrEmpty(basePath) || basePath == "/")
+        {
+            return true;
+        }
+
+        var path = target.AbsolutePath;
+        return path.Equals(basePath, StringComparison.OrdinalIgnoreCase)
+               || path.StartsWith(basePath + "/", StringComparison.OrdinalIgnoreCase);
     }
 
     private static string? FirstNonEmpty(params string?[] values) =>

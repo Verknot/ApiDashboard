@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { directSend, fetchHistory, getApiMessage, proxySend, saveHistory } from '../api/client'
 import { prettyJson } from '../api/schema'
 import type { HistoryItem } from '../api/types'
+import { normalizeResponseHeaders } from '../api/types'
 import { IconSend } from '../icons'
 import { sendModeHint, useSession, useWorkbench } from '../store/workbench'
 import { JsonResponseViewer } from './JsonResponseViewer'
@@ -152,12 +153,13 @@ export function FreeRequestPane({ tabId }: Props) {
       } catch {
         pretty = relay.body
       }
+      const responseHeaders = normalizeResponseHeaders(relay.headers)
       setResult({
         status: relay.status,
         timeMs: relay.timeMs,
         body: pretty,
         error: relay.error ?? undefined,
-        headers: relay.headers ?? {},
+        headers: responseHeaders,
       })
       void saveHistory({
         serviceId: null,
@@ -171,7 +173,7 @@ export function FreeRequestPane({ tabId }: Props) {
         responseStatus: relay.status,
         responseBody: pretty,
         responseTimeMs: relay.timeMs,
-        responseHeaders: JSON.stringify(relay.headers ?? {}),
+        responseHeaders: JSON.stringify(responseHeaders),
       }).then(() => setHistoryTick((tick) => tick + 1))
     } catch (error) {
       const text = getApiMessage(error, 'Send failed')
@@ -278,7 +280,9 @@ export function FreeRequestPane({ tabId }: Props) {
             <span>{result.timeMs} ms</span>
             {result.error ? <span>network</span> : null}
           </div>
-          {Object.keys(result.headers).length > 0 ? <ResponseHeaderList headers={result.headers} /> : null}
+          {Object.keys(result.headers).length > 0 ? (
+            <ResponseHeaderList headers={result.headers} mode={sendViaProxy ? 'proxy' : 'browser'} />
+          ) : null}
           <JsonResponseViewer
             value={result.body || ' '}
             onChange={(next) => setResult({ ...result, body: next })}

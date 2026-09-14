@@ -187,7 +187,26 @@ export type ProxySendResult = {
   timeMs: number
   body: string
   error: string | null
-  headers: Record<string, string>
+  headers: Record<string, string> | Array<{ name: string; value: string }>
+}
+
+export function normalizeResponseHeaders(
+  headers: ProxySendResult['headers'] | null | undefined,
+): Record<string, string> {
+  if (!headers) {
+    return {}
+  }
+  if (Array.isArray(headers)) {
+    return Object.fromEntries(
+      headers
+        .filter((item) => item && item.name)
+        .map((item) => [item.name, item.value ?? '']),
+    )
+  }
+  if (typeof headers === 'object') {
+    return { ...headers }
+  }
+  return {}
 }
 
 export const ASSIGNABLE_ROLES = ['admin', 'tester', 'developer', 'viewer'] as const

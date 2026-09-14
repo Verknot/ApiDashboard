@@ -25,15 +25,20 @@ try
 
     builder.Services.Configure<JwtOptions>(builder.Configuration.GetSection(JwtOptions.SectionName));
     builder.Services.Configure<HistoryOptions>(builder.Configuration.GetSection(HistoryOptions.SectionName));
+    builder.Services.Configure<VaultOptions>(builder.Configuration.GetSection(VaultOptions.SectionName));
+
+    await ConnectionStringResolver.ApplyVaultSecretsAsync(builder.Configuration);
 
     var jwt = builder.Configuration.GetSection(JwtOptions.SectionName).Get<JwtOptions>()
               ?? throw new InvalidOperationException("Секция Jwt не задана.");
     if (string.IsNullOrWhiteSpace(jwt.Key) || jwt.Key.Length < 32)
     {
-        throw new InvalidOperationException("Jwt:Key должен быть не короче 32 символов.");
+        throw new InvalidOperationException(
+            "Jwt:Key должен быть не короче 32 символов (или задайте Vault:JwtKeyPath).");
     }
 
-    var connectionString = await ConnectionStringResolver.ResolveAsync(builder.Configuration);
+    var connectionString = builder.Configuration.GetConnectionString("Default")
+                           ?? throw new InvalidOperationException("ConnectionStrings:Default is empty after Vault resolve.");
     builder.Configuration["ConnectionStrings:Default"] = connectionString;
 
     builder.Services.AddDbContext<AppDbContext>(options =>
@@ -45,7 +50,6 @@ try
     builder.Services.AddScoped<IAuthService, AuthService>();
     builder.Services.AddScoped<IPermissionService, PermissionService>();
     builder.Services.AddScoped<IUserAdminService, UserAdminService>();
-    builder.Services.Configure<VaultOptions>(builder.Configuration.GetSection(VaultOptions.SectionName));
     builder.Services.AddHttpClient("swagger", client =>
     {
         client.Timeout = TimeSpan.FromSeconds(20);

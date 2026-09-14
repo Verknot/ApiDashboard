@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { IconCopy, IconSearch } from '../icons'
 
 type Props = {
@@ -6,6 +6,9 @@ type Props = {
   onChange: (value: string) => void
   onCopy?: () => void
 }
+
+const MIN_HEIGHT = 160
+const DEFAULT_HEIGHT = 360
 
 function escapeHtml(value: string): string {
   return value
@@ -22,24 +25,12 @@ function highlightJson(source: string, query: string): string {
     // keep raw
   }
 
-  const escaped = escapeHtml(text)
+  const escaped = escapeHtml(text || ' ')
   const colored = escaped
-    .replace(
-      /(&quot;(?:\\.|[^&])*?&quot;)(\s*:)/g,
-      '<span class="json-key">$1</span>$2',
-    )
-    .replace(
-      /(:\s*)(&quot;(?:\\.|[^&])*?&quot;)/g,
-      '$1<span class="json-string">$2</span>',
-    )
-    .replace(
-      /(:\s*)(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g,
-      '$1<span class="json-number">$2</span>',
-    )
-    .replace(
-      /(:\s*)(true|false|null)/g,
-      '$1<span class="json-literal">$2</span>',
-    )
+    .replace(/(&quot;(?:\\.|[^&])*?&quot;)(\s*:)/g, '<span class="json-key">$1</span>$2')
+    .replace(/(:\s*)(&quot;(?:\\.|[^&])*?&quot;)/g, '$1<span class="json-string">$2</span>')
+    .replace(/(:\s*)(-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g, '$1<span class="json-number">$2</span>')
+    .replace(/(:\s*)(true|false|null)/g, '$1<span class="json-literal">$2</span>')
 
   if (!query.trim()) {
     return colored
@@ -52,7 +43,11 @@ function highlightJson(source: string, query: string): string {
 
 export function JsonResponseViewer({ value, onChange, onCopy }: Props) {
   const [query, setQuery] = useState('')
+  const [height, setHeight] = useState(DEFAULT_HEIGHT)
   const areaRef = useRef<HTMLTextAreaElement>(null)
+  const preRef = useRef<HTMLPreElement>(null)
+  const dragRef = useRef<{ startY: number; startH: number } | null>(null)
+
   const pretty = useMemo(() => {
     try {
       return JSON.stringify(JSON.parse(value), null, 2)
@@ -62,6 +57,36 @@ export function JsonResponseViewer({ value, onChange, onCopy }: Props) {
   }, [value])
 
   const html = useMemo(() => highlightJson(value || ' ', query), [value, query])
+
+  useEffect(() => {
+    const onMove = (event: MouseEvent) => {
+      if (!dragRef.current) {
+        return
+      }
+      const next = dragRef.current.startH + (event.clientY - dragRef.current.startY)
+      setHeight(Math.max(MIN_HEIGHT, Math.min(window.innerHeight * 0.85, next)))
+    }
+    const onUp = () => {
+      dragRef.current = null
+      document.body.classList.remove('is-row-resizing')
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+    return () => {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+  }, [])
+
+  const syncScroll = () => {
+    const area = areaRef.current
+    const pre = preRef.current
+    if (!area || !pre) {
+      return
+    }
+    pre.scrollTop = area.scrollTop
+    pre.scrollLeft = area.scrollLeft
+  }
 
   const jump = () => {
     const q = query.trim()
@@ -74,6 +99,11 @@ export function JsonResponseViewer({ value, onChange, onCopy }: Props) {
     }
     areaRef.current.focus()
     areaRef.current.setSelectionRange(idx, idx + q.length)
+    const before = pretty.slice(0, idx)
+    const line = before.split('\n').length
+    const lineHeight = 19.5
+    areaRef.current.scrollTop = Math.max(0, (line - 3) * lineHeight)
+    syncScroll()
   }
 
   return (
@@ -99,16 +129,31 @@ export function JsonResponseViewer({ value, onChange, onCopy }: Props) {
           </button>
         ) : null}
       </div>
-      <div className="json-response-editor">
-        <pre className="json-response-highlight" aria-hidden dangerouslySetInnerHTML={{ __html: html }} />
+      <div className="json-response-editor" style={{ height }}>
+        <pre
+          ref={preRef}
+          className="json-response-highlight"
+          aria-hidden
+          dangerouslySetInnerHTML={{ __html: html }}
+        />
         <textarea
           ref={areaRef}
           className="json-response-input"
           value={value}
           spellCheck={false}
+          onScroll={syncScroll}
           onChange={(event) => onChange(event.target.value)}
         />
       </div>
+      <div
+        className="json-response-grip"
+        title="Drag to resize height"
+        onMouseDown={(event) => {
+          event.preventDefault()
+          dragRef.current = { startY: event.clientY, startH: height }
+          document.body.classList.add('is-row-resizing')
+        }}
+      />
     </div>
   )
 }
