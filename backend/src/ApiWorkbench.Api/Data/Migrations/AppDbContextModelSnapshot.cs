@@ -103,6 +103,10 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("path");
 
+                    b.Property<JsonDocument>("Parameters")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("parameters");
+
                     b.Property<JsonDocument>("RequestSchema")
                         .HasColumnType("jsonb")
                         .HasColumnName("request_schema");

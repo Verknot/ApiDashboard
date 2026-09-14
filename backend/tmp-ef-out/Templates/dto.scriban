@@ -1,0 +1,14 @@
+using System.Text.Json.Serialization;
+
+namespace {{ namespace }};
+
+/// <summary>
+/// {{ description }}
+/// </summary>
+public class {{ class_name }}
+{
+{{- for property in properties }}
+    [JsonPropertyName("{{ property.json_name }}")]
+    public {{ property.type }}{{ if property.is_nullable }}?{{ end }} {{ property.name }} { get; set; }
+{{- end }}
+}
