@@ -337,22 +337,18 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
         </form>
       </div>
 
-      <label className="field-label">URL</label>
-      <input className="url-input" value={url} onChange={(event) => setUrl(event.target.value)} />
-      <p className="hint-line send-hint">{sendModeHint(sendViaProxy, moduleAuth.authType, url)}</p>
-      <div className="pills" style={{ margin: '10px 0 14px', width: 'fit-content' }}>
-        <button type="button" className={`pill${sendViaProxy ? ' on' : ''}`} onClick={() => setSendViaProxy(true)}>
-          proxy
-        </button>
-        <button type="button" className={`pill${!sendViaProxy ? ' on' : ''}`} onClick={() => setSendViaProxy(false)}>
-          browser
-        </button>
+      <div className="req-url-row">
+        <input className="url-input" value={url} onChange={(event) => setUrl(event.target.value)} aria-label="URL" />
+        <div className="pills">
+          <button type="button" className={`pill${sendViaProxy ? ' on' : ''}`} onClick={() => setSendViaProxy(true)}>
+            proxy
+          </button>
+          <button type="button" className={`pill${!sendViaProxy ? ' on' : ''}`} onClick={() => setSendViaProxy(false)}>
+            browser
+          </button>
+        </div>
       </div>
-      {!sendViaProxy ? (
-        <p className="hint-line">
-          Browser mode: CORS often exposes only content-type / content-length. Use proxy for full response headers.
-        </p>
-      ) : null}
+      <p className="hint-line send-hint">{sendModeHint(sendViaProxy, moduleAuth.authType, url)}</p>
 
       <EndpointParamsForm
         parameters={parameters}

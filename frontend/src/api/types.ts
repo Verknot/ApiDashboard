@@ -206,6 +206,8 @@ export type ProxySendPayload = {
   method: string
   headers: Record<string, string>
   body: string | null
+  clientCertPath?: string | null
+  clientCertPassword?: string | null
 }
 
 export type ProxySendResult = {

@@ -23,6 +23,8 @@ export type WorkbenchTab = {
   body: string
   token: string
   proxy: boolean
+  clientCertPath: string
+  clientCertPassword: string
 }
 
 type WorkbenchState = {
@@ -38,13 +40,28 @@ type WorkbenchState = {
   selectService: (id: number | null) => void
   selectEndpoint: (serviceId: number, endpointId: number) => void
   openTab: (serviceId: number, endpointId: number) => void
-  openFreeTab: (seed?: Partial<Pick<WorkbenchTab, 'method' | 'url' | 'headersText' | 'body' | 'token' | 'proxy'>>) => string
+  openFreeTab: (
+    seed?: Partial<
+      Pick<
+        WorkbenchTab,
+        'method' | 'url' | 'headersText' | 'body' | 'token' | 'proxy' | 'clientCertPath' | 'clientCertPassword'
+      >
+    >,
+  ) => string
   closeTab: (id: string) => void
   closeAllTabs: () => void
   setActiveTab: (id: string) => void
   setTabBody: (id: string, body: string) => void
   setTabToken: (id: string, token: string) => void
-  patchFreeTab: (id: string, patch: Partial<Pick<WorkbenchTab, 'method' | 'url' | 'headersText' | 'body' | 'token' | 'proxy'>>) => void
+  patchFreeTab: (
+    id: string,
+    patch: Partial<
+      Pick<
+        WorkbenchTab,
+        'method' | 'url' | 'headersText' | 'body' | 'token' | 'proxy' | 'clientCertPath' | 'clientCertPassword'
+      >
+    >,
+  ) => void
   setRegion: (serviceId: number, region: string) => void
   rememberDefaultRegion: (service: CatalogService) => void
   setPendingReplay: (item: HistoryItem | null) => void
@@ -104,6 +121,8 @@ function normalizeTab(raw: Partial<WorkbenchTab> & { id: string }): WorkbenchTab
     body: raw.body ?? '',
     token: raw.token ?? '',
     proxy: raw.proxy ?? true,
+    clientCertPath: raw.clientCertPath ?? '',
+    clientCertPassword: raw.clientCertPassword ?? '',
   }
 }
 

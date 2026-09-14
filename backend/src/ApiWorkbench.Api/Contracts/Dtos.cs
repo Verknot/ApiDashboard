@@ -136,7 +136,11 @@ public sealed record ProxySendRequest(
     string Url,
     string Method,
     Dictionary<string, string>? Headers,
-    string? Body);
+    string? Body,
+    string? ClientCertPath = null,
+    string? ClientCertPassword = null,
+    string? ClientCertBase64 = null,
+    string? ClientCertVault = null);
 
 public sealed record ResponseHeaderItem(string Name, string Value);
 

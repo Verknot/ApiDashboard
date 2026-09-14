@@ -99,7 +99,9 @@ public sealed class ProxySendService(
         }
 
         var module = service is null ? null : ServiceAuthResolver.MatchModuleByUrl(service, target);
-        var auth = service is null ? null : ServiceAuthResolver.Resolve(service, module);
+        var auth = service is null
+            ? FreeRequestAuth(request)
+            : ServiceAuthResolver.Resolve(service, module);
         HttpClient client;
         bool disposeClient;
         try
@@ -139,9 +141,31 @@ public sealed class ProxySendService(
         }
     }
 
+    private static ServiceAuthContext? FreeRequestAuth(ProxySendRequest request)
+    {
+        var path = request.ClientCertPath?.Trim();
+        var base64 = request.ClientCertBase64?.Trim();
+        var vault = request.ClientCertVault?.Trim();
+        if (string.IsNullOrWhiteSpace(path)
+            && string.IsNullOrWhiteSpace(base64)
+            && string.IsNullOrWhiteSpace(vault))
+        {
+            return null;
+        }
+
+        return new ServiceAuthContext(
+            "certificate",
+            path,
+            base64,
+            vault,
+            request.ClientCertPassword,
+            "accessToken",
+            string.Empty);
+    }
+
     private (HttpClient Client, bool Dispose) CreateClient(ServiceEntity? service, ServiceAuthContext? auth)
     {
-        if (service is null || auth is null)
+        if (auth is null)
         {
             return (httpClientFactory.CreateClient("relay"), false);
         }
@@ -149,8 +173,9 @@ public sealed class ProxySendService(
         if (string.Equals(auth.AuthType, "certificate", StringComparison.OrdinalIgnoreCase)
             && !auth.HasClientCertificateMaterial)
         {
+            var where = service is null ? "free request" : $"service '{service.Name}'";
             throw new InvalidOperationException(
-                $"Service '{service.Name}'{(string.IsNullOrEmpty(auth.Module) ? "" : "/" + auth.Module)} needs a client certificate: set api_auth.cert_path / cert_base64 / cert_vault (PFX in C:\\pult-certs).");
+                $"{where}: needs a client certificate (cert path / base64 / vault).");
         }
 
         if (!auth.NeedsClientCertificate)
@@ -158,7 +183,8 @@ public sealed class ProxySendService(
             return (httpClientFactory.CreateClient("relay"), false);
         }
 
-        var handler = ClientCertLocator.CreateHandler(auth, service.Name, configuration, hostEnvironment);
+        var label = service?.Name ?? "free-request";
+        var handler = ClientCertLocator.CreateHandler(auth, label, configuration, hostEnvironment);
         return (new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(60) }, true);
     }
 
@@ -173,9 +199,16 @@ public sealed class ProxySendService(
                 ? "this URL"
                 : $"'{service.Name}'{(auth is null || string.IsNullOrEmpty(auth.Module) ? "" : "/" + auth.Module)}";
             var hasCert = auth?.HasClientCertificateMaterial == true;
+            if (service is null)
+            {
+                return hasCert
+                    ? $"TLS: server requires a client certificate for {where}, but the PFX was rejected (wrong file, expired, or password). Check C:\\pult-certs and the cert fields below."
+                    : $"TLS: server requires a client certificate (mTLS) for {where}. In Free request (proxy) set Client cert to a file in C:\\pult-certs (e.g. client.pfx) and password if needed.";
+            }
+
             return hasCert
-                ? $"TLS: server requires a client certificate for {where}, but the presented PFX was rejected (wrong cert, expired, or password). Check C:\\pult-certs and api_auth.cert_path / cert_password."
-                : $"TLS: server requires a client certificate (mTLS) for {where}. Set api_auth.type: certificate (or token) and api_auth.cert_path: your.pfx in C:\\pult-certs, then From disk / reload config.";
+                ? $"TLS: server requires a client certificate for {where}, but the presented PFX was rejected (wrong cert, expired, or password). Check C:\\pult-certs and auth.cert / cert_password."
+                : $"TLS: server requires a client certificate (mTLS) for {where}. Set auth.type: certificate (or token) and auth.cert: your.pfx in services.yaml, then Save / From disk.";
         }
 
         return ex.GetBaseException().Message;

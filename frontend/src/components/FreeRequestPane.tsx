@@ -63,6 +63,7 @@ export function FreeRequestPane({ tabId }: Props) {
   const [result, setResult] = useState<SendResult | null>(null)
   const [historyTick, setHistoryTick] = useState(0)
   const [recent, setRecent] = useState<HistoryItem[]>([])
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   const method = tab?.method ?? 'GET'
   const url = tab?.url ?? ''
@@ -70,6 +71,8 @@ export function FreeRequestPane({ tabId }: Props) {
   const body = tab?.body ?? ''
   const token = tab?.token ?? ''
   const sendViaProxy = tab?.proxy ?? true
+  const clientCertPath = tab?.clientCertPath ?? ''
+  const clientCertPassword = tab?.clientCertPassword ?? ''
 
   const headersError = useMemo(() => {
     try {
@@ -97,6 +100,12 @@ export function FreeRequestPane({ tabId }: Props) {
       .then((items) => setRecent(items.filter((item) => !item.endpointId).slice(0, 12)))
       .catch(() => setRecent([]))
   }, [historyTick])
+
+  useEffect(() => {
+    if (hasBody(method) || clientCertPath.trim()) {
+      setDetailsOpen(true)
+    }
+  }, [method, clientCertPath])
 
   if (!tab) {
     return null
@@ -145,6 +154,8 @@ export function FreeRequestPane({ tabId }: Props) {
         method,
         headers,
         body: hasBody(method) ? body : null,
+        clientCertPath: sendViaProxy && clientCertPath.trim() ? clientCertPath.trim() : null,
+        clientCertPassword: sendViaProxy && clientCertPassword ? clientCertPassword : null,
       }
       const relay = sendViaProxy ? await proxySend(payload) : await directSend(payload)
       let pretty = relay.body
@@ -184,95 +195,129 @@ export function FreeRequestPane({ tabId }: Props) {
   }
 
   return (
-    <>
-      <div className="endpoint-title">
-        <span className={`method-badge method-${method.toLowerCase()}`}>{method}</span>
-        <span>Free request</span>
-      </div>
-      <p style={{ color: 'var(--mute)', maxWidth: '58ch', lineHeight: 1.55, marginTop: 0 }}>
-        Paste any absolute http/https URL. proxy goes through the workbench (no CORS). browser is a direct fetch.
-      </p>
-
-      <div className="pills" style={{ marginBottom: 12 }}>
-        {METHODS.map((item) => (
-          <button
-            key={item}
-            type="button"
-            className={`pill${method === item ? ' on' : ''}`}
-            onClick={() => apply({ method: item })}
+    <div className="free-pane">
+      <div className="free-composer">
+        <div className="free-toolbar">
+          <select
+            className="free-method"
+            value={method}
+            onChange={(event) => apply({ method: event.target.value })}
+            aria-label="HTTP method"
           >
-            {item}
+            {METHODS.map((item) => (
+              <option key={item} value={item}>
+                {item}
+              </option>
+            ))}
+          </select>
+          <div className="pills free-mode-pills">
+            <button type="button" className={`pill${sendViaProxy ? ' on' : ''}`} onClick={() => apply({ proxy: true })}>
+              proxy
+            </button>
+            <button
+              type="button"
+              className={`pill${!sendViaProxy ? ' on' : ''}`}
+              onClick={() => apply({ proxy: false })}
+            >
+              browser
+            </button>
+          </div>
+          <button
+            type="button"
+            className="btn btn-primary free-send"
+            disabled={sending || !me?.canSend}
+            onClick={() => void send()}
+          >
+            <IconSend size={16} />
+            {sending ? 'Sending…' : 'Send'}
           </button>
-        ))}
-      </div>
+        </div>
 
-      <div className="pills" style={{ marginBottom: 12 }}>
-        <button type="button" className={`pill${sendViaProxy ? ' on' : ''}`} onClick={() => apply({ proxy: true })}>
-          proxy
-        </button>
-        <button type="button" className={`pill${!sendViaProxy ? ' on' : ''}`} onClick={() => apply({ proxy: false })}>
-          browser
-        </button>
-        <span className="meta">{sendViaProxy ? 'proxy' : 'browser'}</span>
-      </div>
+        <input
+          className="url-input free-url"
+          value={url}
+          placeholder="https://api.example.com/path"
+          onChange={(event) => apply({ url: event.target.value })}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+              void send()
+            }
+          }}
+        />
+        <p className="hint-line send-hint free-hint">{sendModeHint(sendViaProxy, undefined, url)}</p>
 
-      <label className="field-label">URL</label>
-      <input
-        className="url-input"
-        value={url}
-        placeholder="https://api.example.com/path"
-        onChange={(event) => apply({ url: event.target.value })}
-      />
-      <p className="hint-line send-hint">{sendModeHint(sendViaProxy, undefined, url)}</p>
-
-      <label className="field-label">Bearer token</label>
-      <input
-        className="url-input"
-        type="password"
-        value={token}
-        placeholder="optional · added as Authorization if header is missing"
-        onChange={(event) => apply({ token: event.target.value })}
-      />
-
-      <label className="field-label">Headers (JSON)</label>
-      <Input.TextArea
-        className="json-body"
-        value={headersText}
-        onChange={(event) => apply({ headersText: event.target.value })}
-        autoSize={{ minRows: 4, maxRows: 10 }}
-        spellCheck={false}
-      />
-      {headersError ? <p className="json-error">{headersError}</p> : null}
-
-      {hasBody(method) ? (
-        <>
-          <label className="field-label">Body</label>
-          <Input.TextArea
-            className="json-body"
-            value={body}
-            onChange={(event) => apply({ body: event.target.value })}
-            autoSize={{ minRows: 8, maxRows: 18 }}
-            spellCheck={false}
-          />
-          {bodyError ? <p className="json-error">{bodyError}</p> : null}
-        </>
-      ) : null}
-
-      <div className="send-row">
-        <button
-          type="button"
-          className="btn btn-primary"
-          style={{ width: 'auto', paddingInline: 18 }}
-          disabled={sending || !me?.canSend}
-          onClick={() => void send()}
+        <details
+          className="free-details"
+          open={detailsOpen}
+          onToggle={(event) => setDetailsOpen((event.target as HTMLDetailsElement).open)}
         >
-          <IconSend size={16} />
-          {sending ? 'Sending…' : sendViaProxy ? 'Send · proxy' : 'Send · browser'}
-        </button>
+          <summary>
+            Token · headers{hasBody(method) ? ' · body' : ''}
+            {sendViaProxy ? ' · client cert' : ''}
+          </summary>
+          <div className="free-details-body">
+            <label className="field-label">Bearer token</label>
+            <input
+              className="url-input"
+              type="password"
+              value={token}
+              placeholder="optional"
+              onChange={(event) => apply({ token: event.target.value })}
+            />
+
+            <label className="field-label">Headers (JSON)</label>
+            <Input.TextArea
+              className="json-body"
+              value={headersText}
+              onChange={(event) => apply({ headersText: event.target.value })}
+              autoSize={{ minRows: 2, maxRows: 8 }}
+              spellCheck={false}
+            />
+            {headersError ? <p className="json-error">{headersError}</p> : null}
+
+            {hasBody(method) ? (
+              <>
+                <label className="field-label">Body</label>
+                <Input.TextArea
+                  className="json-body"
+                  value={body}
+                  onChange={(event) => apply({ body: event.target.value })}
+                  autoSize={{ minRows: 4, maxRows: 14 }}
+                  spellCheck={false}
+                />
+                {bodyError ? <p className="json-error">{bodyError}</p> : null}
+              </>
+            ) : null}
+
+            {sendViaProxy ? (
+              <div className="free-cert-row">
+                <div>
+                  <label className="field-label">Client cert (PFX in C:\pult-certs)</label>
+                  <input
+                    className="url-input"
+                    value={clientCertPath}
+                    placeholder="client.pfx"
+                    onChange={(event) => apply({ clientCertPath: event.target.value })}
+                  />
+                </div>
+                <div>
+                  <label className="field-label">Cert password</label>
+                  <input
+                    className="url-input"
+                    type="password"
+                    value={clientCertPassword}
+                    placeholder="optional"
+                    onChange={(event) => apply({ clientCertPassword: event.target.value })}
+                  />
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </details>
       </div>
 
       {result ? (
-        <section className="response-card">
+        <section className="response-card free-response">
           <div className="response-head">
             <span className={`status-pill ${statusTone(result.status, result.error)}`}>
               {result.status ?? 'ERR'}
@@ -288,13 +333,17 @@ export function FreeRequestPane({ tabId }: Props) {
             onChange={(next) => setResult({ ...result, body: next })}
           />
         </section>
-      ) : null}
+      ) : (
+        <div className="free-empty-response">
+          <p className="meta">Response will show here after Send</p>
+        </div>
+      )}
 
       {recent.length > 0 ? (
-        <section className="endpoint-history">
+        <section className="endpoint-history free-history">
           <div className="endpoint-history-head">
             <p className="catalog-head" style={{ margin: 0 }}>
-              Recent free requests
+              Recent
             </p>
             <span className="meta">{recent.length}</span>
           </div>
@@ -333,6 +382,6 @@ export function FreeRequestPane({ tabId }: Props) {
           </ul>
         </section>
       ) : null}
-    </>
+    </div>
   )
 }
