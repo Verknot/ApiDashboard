@@ -17,15 +17,16 @@ function escapeHtml(value: string): string {
     .replaceAll('>', '&gt;')
 }
 
-function highlightJson(source: string, query: string): string {
-  let text = source
+function formatJson(source: string): string {
   try {
-    text = JSON.stringify(JSON.parse(source), null, 2)
+    return JSON.stringify(JSON.parse(source), null, 2)
   } catch {
-    // keep raw
+    return source
   }
+}
 
-  const escaped = escapeHtml(text || ' ')
+function highlightJson(source: string, query: string): string {
+  const escaped = escapeHtml(source || ' ')
   const colored = escaped
     .replace(/(&quot;(?:\\.|[^&])*?&quot;)(\s*:)/g, '<span class="json-key">$1</span>$2')
     .replace(/(:\s*)(&quot;(?:\\.|[^&])*?&quot;)/g, '$1<span class="json-string">$2</span>')
@@ -47,16 +48,18 @@ export function JsonResponseViewer({ value, onChange, onCopy }: Props) {
   const areaRef = useRef<HTMLTextAreaElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
+  const lastExternal = useRef(value)
 
-  const pretty = useMemo(() => {
-    try {
-      return JSON.stringify(JSON.parse(value), null, 2)
-    } catch {
-      return value
+  const [draft, setDraft] = useState(() => formatJson(value))
+
+  useEffect(() => {
+    if (value !== lastExternal.current) {
+      lastExternal.current = value
+      setDraft(formatJson(value))
     }
   }, [value])
 
-  const html = useMemo(() => highlightJson(value || ' ', query), [value, query])
+  const html = useMemo(() => highlightJson(draft || ' ', query), [draft, query])
 
   useEffect(() => {
     const onMove = (event: MouseEvent) => {
@@ -93,13 +96,13 @@ export function JsonResponseViewer({ value, onChange, onCopy }: Props) {
     if (!q || !areaRef.current) {
       return
     }
-    const idx = pretty.toLowerCase().indexOf(q.toLowerCase())
+    const idx = draft.toLowerCase().indexOf(q.toLowerCase())
     if (idx < 0) {
       return
     }
     areaRef.current.focus()
     areaRef.current.setSelectionRange(idx, idx + q.length)
-    const before = pretty.slice(0, idx)
+    const before = draft.slice(0, idx)
     const line = before.split('\n').length
     const lineHeight = 19.5
     areaRef.current.scrollTop = Math.max(0, (line - 3) * lineHeight)
@@ -139,10 +142,15 @@ export function JsonResponseViewer({ value, onChange, onCopy }: Props) {
         <textarea
           ref={areaRef}
           className="json-response-input"
-          value={value}
+          value={draft}
           spellCheck={false}
           onScroll={syncScroll}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            const next = event.target.value
+            setDraft(next)
+            lastExternal.current = next
+            onChange(next)
+          }}
         />
       </div>
       <div

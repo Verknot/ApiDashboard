@@ -1,5 +1,6 @@
+import { message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { fetchServices } from '../api/client'
+import { fetchServices, getApiMessage, refreshSwagger } from '../api/client'
 import { prettyJson } from '../api/schema'
 import type { CatalogService, ServiceEndpoint } from '../api/types'
 import { EnvRegionBar } from '../components/EnvRegionBar'
@@ -13,7 +14,7 @@ import { useSession, useWorkbench } from '../store/workbench'
 export function WorkbenchPage() {
   const [services, setServices] = useState<CatalogService[]>([])
   const [loading, setLoading] = useState(true)
-  const isAdmin = useSession((s) => s.me?.isAdmin)
+  const [refreshingSwagger, setRefreshingSwagger] = useState(false)
   const canSend = useSession((s) => s.me?.canSend)
   const selectedServiceId = useWorkbench((s) => s.selectedServiceId)
   const selectedEndpointId = useWorkbench((s) => s.selectedEndpointId)
@@ -52,8 +53,8 @@ export function WorkbenchPage() {
         return
       }
       selectEndpoint(pendingReplay.serviceId, pendingReplay.endpointId)
-      if (pendingReplay.environment === 'dev' || pendingReplay.environment === 'stage' || pendingReplay.environment === 'prod') {
-        setEnvironment(pendingReplay.environment)
+      if (pendingReplay.environment?.trim()) {
+        setEnvironment(pendingReplay.environment.trim().toLowerCase())
       }
       if (pendingReplay.regionCode) {
         setRegion(pendingReplay.serviceId, pendingReplay.regionCode)
@@ -116,6 +117,25 @@ export function WorkbenchPage() {
     )
   }
 
+  const onRefreshSwagger = async () => {
+    setRefreshingSwagger(true)
+    try {
+      const result = await refreshSwagger()
+      const items = await fetchServices()
+      setServices(items)
+      items.forEach(rememberDefaultRegion)
+      if (result.failed === 0) {
+        message.success(`Swagger: ${result.ok} services`)
+      } else {
+        message.warning(`Swagger: ok ${result.ok}, failed ${result.failed}`)
+      }
+    } catch (error) {
+      message.error(getApiMessage(error, 'Could not refresh swagger'))
+    } finally {
+      setRefreshingSwagger(false)
+    }
+  }
+
   return (
     <>
       <p className="page-kicker">Request</p>
@@ -174,6 +194,8 @@ export function WorkbenchPage() {
             services={services}
             loading={loading}
             onOpenFree={canSend ? () => openFreeTab() : undefined}
+            onRefreshSwagger={() => void onRefreshSwagger()}
+            refreshingSwagger={refreshingSwagger}
           />
         }
         right={
@@ -217,9 +239,7 @@ export function WorkbenchPage() {
                   <p style={{ color: 'var(--mute)', maxWidth: '58ch', lineHeight: 1.55, marginTop: 0 }}>
                     {selected.endpointCount
                       ? 'Pick an endpoint on the left — a tab with the form will open.'
-                      : isAdmin
-                        ? 'Contract is empty. In Admin click Refresh all.'
-                        : 'Contract is empty. Ask an admin to refresh swagger.'}
+                      : 'Contract is empty. Click Swagger in the catalog toolbar to refresh.'}
                   </p>
                 </>
               ) : (

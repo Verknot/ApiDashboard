@@ -38,7 +38,7 @@ public sealed class CatalogSyncService(
 {
     private static readonly IDeserializer Yaml = new DeserializerBuilder()
         .WithNamingConvention(UnderscoredNamingConvention.Instance)
-        .WithTypeConverter(new SwaggerYamlListConverter())
+        .WithTypeConverter(new RegionYamlListConverter())
         .WithTypeConverter(new StringOrEnvMapConverter())
         .IgnoreUnmatchedProperties()
         .Build();
@@ -176,25 +176,135 @@ public sealed class CatalogSyncService(
 
     private static ResolvedService ResolveService(ServiceYamlEntry entry, string? defaultSplunkUrl)
     {
-        var authType = (entry.Auth?.Type ?? "none").Trim().ToLowerInvariant();
-        if (authType is not ("token" or "certificate" or "none"))
+        var portals = entry.Portals ?? [];
+        if (portals.Count == 0)
         {
-            throw new InvalidOperationException($"Неизвестный auth.type '{entry.Auth?.Type}'.");
+            throw new InvalidOperationException($"У сервиса '{entry.Name}' укажите portals (UserPortal, BackOffice, …).");
         }
 
-        var regions = entry.Regions?
+        var regions = (entry.Regions?.Items ?? [])
             .Where(r => !string.IsNullOrWhiteSpace(r.Code))
-            .Select((r, i) => new ResolvedRegion(r.Code.Trim().ToLowerInvariant(), string.IsNullOrWhiteSpace(r.Label) ? r.Code.Trim().ToUpperInvariant() : r.Label.Trim(), i, r.Environments))
-            .ToList() ?? [];
+            .Select((r, i) => new ResolvedRegion(
+                r.Code.Trim().ToLowerInvariant(),
+                string.IsNullOrWhiteSpace(r.Label) ? r.Code.Trim().ToUpperInvariant() : r.Label.Trim(),
+                i,
+                r.Environments))
+            .ToList();
 
         var isRegional = regions.Count > 0;
-        var swaggerSpecs = ResolveSwaggerSpecs(entry, regions, isRegional);
-        var swagger = swaggerSpecs.FirstOrDefault();
+        var declaredEnvs = CollectDeclaredEnvironments(portals);
+        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var swaggerSpecs = new List<ResolvedSwagger>();
+        var urls = new List<ResolvedUrl>();
+        var tokenUrls = new List<ResolvedTokenUrl>();
+        ResolvedTokenAuth? sharedTokenMeta = null;
 
-        var urls = ResolveUrls(entry, regions, isRegional, entry.Environments, module: string.Empty, requireAll: true);
-        foreach (var spec in swaggerSpecs.Where(item => !string.IsNullOrWhiteSpace(item.Name)))
+        for (var i = 0; i < portals.Count; i++)
         {
-            urls.AddRange(ResolveUrls(entry, regions, isRegional, spec.Environments, spec.Name, requireAll: false));
+            var portal = portals[i];
+            var name = portal.Name?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                throw new InvalidOperationException($"У сервиса '{entry.Name}' portal #{i + 1} без name.");
+            }
+
+            if (!names.Add(name))
+            {
+                throw new InvalidOperationException($"Повторяется portal.name '{name}'.");
+            }
+
+            var swaggerUrl = portal.Swagger?.Url?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(swaggerUrl))
+            {
+                throw new InvalidOperationException($"У portal '{name}' укажите swagger.url.");
+            }
+
+            var basic = portal.Swagger?.Basic;
+            string swaggerAuthType = "none";
+            string? basicUsername = null;
+            string? basicPassword = null;
+            string? vaultUsername = null;
+            string? vaultPassword = null;
+            string? vaultPath = null;
+            var vaultBase64 = false;
+            if (basic is not null)
+            {
+                swaggerAuthType = "basic";
+                basicUsername = FirstNonEmpty(basic.Username);
+                basicPassword = FirstNonEmpty(basic.Password);
+                vaultUsername = FirstNonEmpty(basic.VaultUsername);
+                vaultPassword = FirstNonEmpty(basic.VaultPassword);
+                vaultPath = FirstNonEmpty(basic.VaultPath);
+                vaultBase64 = basic.VaultBase64;
+                var hasDirect = !string.IsNullOrWhiteSpace(basicUsername) || !string.IsNullOrWhiteSpace(basicPassword);
+                if (hasDirect && (string.IsNullOrWhiteSpace(basicUsername) || string.IsNullOrWhiteSpace(basicPassword)))
+                {
+                    throw new InvalidOperationException($"У portal '{name}' swagger.basic: укажите и username, и password.");
+                }
+            }
+
+            var urlsMap = portal.Urls ?? new Dictionary<string, string>();
+            if (urlsMap.Count == 0)
+            {
+                throw new InvalidOperationException($"У portal '{name}' укажите urls (хотя бы одну среду).");
+            }
+
+            var normalizedUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var (key, value) in urlsMap)
+            {
+                normalizedUrls[ServiceEnvironments.Normalize(key)] = value;
+            }
+
+            urls.AddRange(ResolvePortalUrls(regions, isRegional, normalizedUrls, name));
+
+            var auth = portal.Auth ?? new AuthYaml { Type = "none" };
+            var apiAuthType = (auth.Type ?? "none").Trim().ToLowerInvariant();
+            if (apiAuthType is not ("token" or "certificate" or "none"))
+            {
+                throw new InvalidOperationException($"Неизвестный auth.type '{auth.Type}' у portal '{name}'.");
+            }
+
+            var certPath = auth.ResolvedCertPath;
+            var certBase64 = FirstNonEmpty(auth.CertBase64);
+            var certVault = FirstNonEmpty(auth.CertVault);
+            var certPassword = auth.CertPassword;
+            var moduleToken = ResolveTokenAuth(auth, regions, isRegional, apiAuthType, name, declaredEnvs);
+            if (apiAuthType == "token" && moduleToken.Urls.Count == 0)
+            {
+                throw new InvalidOperationException($"У portal '{name}' auth.type=token, но нет auth.token_url.");
+            }
+
+            if (apiAuthType is "token" or "certificate"
+                && string.IsNullOrWhiteSpace(certPath)
+                && string.IsNullOrWhiteSpace(certBase64)
+                && string.IsNullOrWhiteSpace(certVault)
+                && apiAuthType == "certificate")
+            {
+                throw new InvalidOperationException(
+                    $"У portal '{name}' auth.type=certificate: укажите auth.cert / cert_base64 / cert_vault.");
+            }
+
+            tokenUrls.AddRange(moduleToken.Urls);
+            sharedTokenMeta ??= moduleToken;
+
+            swaggerSpecs.Add(new ResolvedSwagger(
+                name,
+                i,
+                swaggerUrl,
+                swaggerAuthType,
+                vaultPath,
+                vaultUsername,
+                vaultPassword,
+                vaultBase64,
+                basicUsername,
+                basicPassword,
+                normalizedUrls,
+                apiAuthType,
+                certPath,
+                certBase64,
+                certVault,
+                certPassword,
+                moduleToken));
         }
 
         var defaultRegion = entry.DefaultRegion?.Trim().ToLowerInvariant();
@@ -210,35 +320,26 @@ public sealed class CatalogSyncService(
             defaultRegion = null;
         }
 
-        var tokenAuth = ResolveTokenAuth(entry.Auth, regions, isRegional, authType, module: string.Empty);
-        var moduleTokenUrls = swaggerSpecs
-            .SelectMany(spec => spec.Token.Urls)
-            .ToList();
-        if (moduleTokenUrls.Count > 0)
-        {
-            tokenAuth = tokenAuth with
-            {
-                Urls = tokenAuth.Urls.Concat(moduleTokenUrls).ToList()
-            };
-        }
+        var first = swaggerSpecs[0];
+        var tokenAuth = (sharedTokenMeta ?? ResolvedTokenAuth.Empty) with { Urls = tokenUrls };
 
         return new ResolvedService(
             entry.Name.Trim(),
             entry.Description?.Trim(),
             entry.Color?.Trim(),
-            swagger?.Url,
-            swagger?.AuthType ?? "none",
-            swagger?.VaultPath,
-            swagger?.VaultUsernamePath,
-            swagger?.VaultPasswordPath,
-            swagger?.VaultBase64 ?? false,
-            swagger?.BasicUsername,
-            swagger?.BasicPassword,
-            authType,
-            entry.Auth?.CertPath?.Trim(),
-            FirstNonEmpty(entry.Auth?.CertBase64),
-            FirstNonEmpty(entry.Auth?.CertVault),
-            entry.Auth?.CertPassword,
+            first.Url,
+            first.AuthType,
+            first.VaultPath,
+            first.VaultUsernamePath,
+            first.VaultPasswordPath,
+            first.VaultBase64,
+            first.BasicUsername,
+            first.BasicPassword,
+            "none",
+            null,
+            null,
+            null,
+            null,
             entry.Proxy ?? true,
             FirstNonEmpty(entry.SplunkUrl, defaultSplunkUrl),
             isRegional,
@@ -249,149 +350,52 @@ public sealed class CatalogSyncService(
             tokenAuth);
     }
 
-    private static List<ResolvedSwagger> ResolveSwaggerSpecs(
-        ServiceYamlEntry entry,
-        IReadOnlyList<ResolvedRegion> regions,
-        bool isRegional)
+    private static IReadOnlyList<string> CollectDeclaredEnvironments(IReadOnlyList<PortalYaml> portals)
     {
-        var items = entry.Swagger?.Items ?? [];
-        if (items.Count == 0)
+        var keys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var portal in portals)
         {
-            return [];
+            if (portal.Urls is not null)
+            {
+                foreach (var key in portal.Urls.Keys)
+                {
+                    keys.Add(ServiceEnvironments.Normalize(key));
+                }
+            }
+
+            if (portal.Auth?.TokenUrl is { } tokenUrl)
+            {
+                foreach (var key in tokenUrl.ByEnvironment.Keys)
+                {
+                    keys.Add(ServiceEnvironments.Normalize(key));
+                }
+            }
         }
 
-        if (items.Count > 1 && items.Any(item => string.IsNullOrWhiteSpace(item.Name)))
+        if (keys.Count == 0)
         {
-            throw new InvalidOperationException("Если swagger несколько, у каждого укажите name (UserPortal, backend, backOffice…).");
+            throw new InvalidOperationException("Нет urls у portals. Укажите хотя бы одну среду (dev / qa / …).");
         }
 
-        var names = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var result = new List<ResolvedSwagger>();
-        for (var i = 0; i < items.Count; i++)
-        {
-            var spec = items[i];
-            var auth = (spec.Auth ?? "none").Trim().ToLowerInvariant();
-            if (auth is not ("basic" or "none"))
-            {
-                throw new InvalidOperationException($"Неизвестный swagger.auth '{spec.Auth}'.");
-            }
-
-            var name = spec.Name?.Trim() ?? string.Empty;
-            if (!string.IsNullOrEmpty(name) && !names.Add(name))
-            {
-                throw new InvalidOperationException($"Повторяется swagger.name '{name}'.");
-            }
-
-            var vaultUsername = FirstNonEmpty(spec.VaultUsername, spec.Vault?.Username);
-            var vaultPassword = FirstNonEmpty(spec.VaultPassword, spec.Vault?.Password);
-            var vaultPath = FirstNonEmpty(spec.VaultPath, spec.Vault?.Path);
-            var vaultBase64 = spec.VaultBase64 || spec.Vault?.Base64 == true;
-            var basicUsername = FirstNonEmpty(spec.Username);
-            var basicPassword = FirstNonEmpty(spec.Password);
-            if (auth == "basic")
-            {
-                var hasDirect = !string.IsNullOrWhiteSpace(basicUsername) || !string.IsNullOrWhiteSpace(basicPassword);
-                if (hasDirect && (string.IsNullOrWhiteSpace(basicUsername) || string.IsNullOrWhiteSpace(basicPassword)))
-                {
-                    throw new InvalidOperationException("Для swagger basic укажите и username, и password.");
-                }
-            }
-
-            if (spec.Environments is { Count: > 0 } && string.IsNullOrWhiteSpace(name))
-            {
-                throw new InvalidOperationException("environments у swagger укажите вместе с name.");
-            }
-
-            if (spec.ApiAuth is not null && string.IsNullOrWhiteSpace(name) && items.Count > 1)
-            {
-                throw new InvalidOperationException("api_auth у swagger укажите вместе с name.");
-            }
-
-            Dictionary<string, string>? swaggerEnvironments = null;
-            if (spec.Environments is { Count: > 0 })
-            {
-                swaggerEnvironments = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var (key, value) in spec.Environments)
-                {
-                    var env = key.Trim().ToLowerInvariant();
-                    if (!ServiceEnvironments.All.Contains(env))
-                    {
-                        throw new InvalidOperationException($"Неизвестная среда '{key}' у swagger '{name}'.");
-                    }
-
-                    swaggerEnvironments[env] = value;
-                }
-            }
-
-            string? apiAuthType = null;
-            string? certPath = null;
-            string? certBase64 = null;
-            string? certVault = null;
-            string? certPassword = null;
-            var moduleToken = ResolvedTokenAuth.Empty;
-            if (spec.ApiAuth is not null)
-            {
-                apiAuthType = (spec.ApiAuth.Type ?? "none").Trim().ToLowerInvariant();
-                if (apiAuthType is not ("token" or "certificate" or "none"))
-                {
-                    throw new InvalidOperationException($"Неизвестный api_auth.type '{spec.ApiAuth.Type}' у swagger '{name}'.");
-                }
-
-                certPath = FirstNonEmpty(spec.ApiAuth.CertPath);
-                certBase64 = FirstNonEmpty(spec.ApiAuth.CertBase64);
-                certVault = FirstNonEmpty(spec.ApiAuth.CertVault);
-                certPassword = spec.ApiAuth.CertPassword;
-                moduleToken = ResolveTokenAuth(spec.ApiAuth, regions, isRegional, apiAuthType, name);
-                if (apiAuthType == "token" && moduleToken.Urls.Count == 0)
-                {
-                    throw new InvalidOperationException($"У swagger '{name}' api_auth.type=token, но нет api_auth.token_url.");
-                }
-            }
-
-            result.Add(new ResolvedSwagger(
-                name,
-                i,
-                spec.Url?.Trim() ?? string.Empty,
-                auth,
-                vaultPath,
-                vaultUsername,
-                vaultPassword,
-                vaultBase64,
-                basicUsername,
-                basicPassword,
-                swaggerEnvironments,
-                apiAuthType,
-                certPath,
-                certBase64,
-                certVault,
-                certPassword,
-                moduleToken));
-        }
-
-        return result;
+        return ServiceEnvironments.Order(keys);
     }
 
-    private static List<ResolvedUrl> ResolveUrls(
-        ServiceYamlEntry entry,
+    private static List<ResolvedUrl> ResolvePortalUrls(
         IReadOnlyList<ResolvedRegion> regions,
         bool isRegional,
-        Dictionary<string, string>? environments,
-        string module,
-        bool requireAll)
+        Dictionary<string, string> urlsMap,
+        string module)
     {
+        var envKeys = ServiceEnvironments.Order(urlsMap.Keys);
         var urls = new List<ResolvedUrl>();
         if (!isRegional)
         {
-            foreach (var env in ServiceEnvironments.All)
+            foreach (var env in envKeys)
             {
-                if (environments is null || !environments.TryGetValue(env, out var url) || string.IsNullOrWhiteSpace(url))
+                var url = LookupEnv(urlsMap, env);
+                if (string.IsNullOrWhiteSpace(url))
                 {
-                    if (requireAll)
-                    {
-                        throw new InvalidOperationException($"Нет URL для среды '{env}'.");
-                    }
-
-                    continue;
+                    throw new InvalidOperationException($"У portal '{module}' нет URL для среды '{env}'.");
                 }
 
                 urls.Add(new ResolvedUrl(env, string.Empty, url.Trim(), module));
@@ -402,22 +406,28 @@ public sealed class CatalogSyncService(
 
         foreach (var region in regions)
         {
-            foreach (var env in ServiceEnvironments.All)
+            foreach (var env in envKeys)
             {
-                if (requireAll)
+                var template = LookupEnv(urlsMap, env)
+                               ?? throw new InvalidOperationException($"У portal '{module}' нет URL для среды '{env}'.");
+                if (region.Environments is not null)
                 {
-                    urls.Add(new ResolvedUrl(env, region.Code, ResolveRegionalUrl(entry, region, env), module));
-                    continue;
+                    var explicitHit = region.Environments.FirstOrDefault(kv =>
+                        ServiceEnvironments.Normalize(kv.Key) == env);
+                    if (!string.IsNullOrWhiteSpace(explicitHit.Value))
+                    {
+                        urls.Add(new ResolvedUrl(env, region.Code, explicitHit.Value.Trim(), module));
+                        continue;
+                    }
                 }
 
-                if (environments is null || !environments.TryGetValue(env, out var template) || string.IsNullOrWhiteSpace(template))
+                if (!template.Contains("{region}", StringComparison.OrdinalIgnoreCase))
                 {
-                    continue;
+                    throw new InvalidOperationException(
+                        $"У portal '{module}' URL среды '{env}' для регионов должен содержать {{region}}.");
                 }
 
-                var url = template.Contains("{region}", StringComparison.OrdinalIgnoreCase)
-                    ? template.Replace("{region}", region.Code, StringComparison.OrdinalIgnoreCase).Trim()
-                    : template.Trim();
+                var url = template.Replace("{region}", region.Code, StringComparison.OrdinalIgnoreCase).Trim();
                 urls.Add(new ResolvedUrl(env, region.Code, url, module));
             }
         }
@@ -425,12 +435,28 @@ public sealed class CatalogSyncService(
         return urls;
     }
 
+    private static string? LookupEnv(Dictionary<string, string>? environments, string env)
+    {
+        if (environments is null || environments.Count == 0)
+        {
+            return null;
+        }
+
+        if (environments.TryGetValue(env, out var direct) && !string.IsNullOrWhiteSpace(direct))
+        {
+            return direct;
+        }
+
+        return environments.FirstOrDefault(kv => ServiceEnvironments.Normalize(kv.Key) == env).Value;
+    }
+
     private static ResolvedTokenAuth ResolveTokenAuth(
         AuthYaml? auth,
         IReadOnlyList<ResolvedRegion> regions,
         bool isRegional,
         string authType,
-        string module)
+        string module,
+        IReadOnlyList<string> environments)
     {
         if (authType != "token" || auth?.TokenUrl is null)
         {
@@ -438,18 +464,14 @@ public sealed class CatalogSyncService(
         }
 
         var map = auth.TokenUrl;
-        foreach (var key in map.ByEnvironment.Keys)
-        {
-            if (!ServiceEnvironments.All.Contains(key.Trim().ToLowerInvariant()))
-            {
-                throw new InvalidOperationException($"Неизвестная среда '{key}' у auth.token_url.");
-            }
-        }
+        var envKeys = map.ByEnvironment.Count > 0
+            ? ServiceEnvironments.Order(map.ByEnvironment.Keys)
+            : environments;
 
         var urls = new List<ResolvedTokenUrl>();
         IEnumerable<(string Env, string Region)> slots = isRegional
-            ? regions.SelectMany(region => ServiceEnvironments.All.Select(env => (env, region.Code)))
-            : ServiceEnvironments.All.Select(env => (env, string.Empty));
+            ? regions.SelectMany(region => envKeys.Select(env => (env, region.Code)))
+            : envKeys.Select(env => (env, string.Empty));
 
         foreach (var (env, region) in slots)
         {
@@ -458,9 +480,18 @@ public sealed class CatalogSyncService(
             {
                 raw = fromMap;
             }
-            else if (!string.IsNullOrWhiteSpace(map.Scalar))
+            else
             {
-                raw = map.Scalar;
+                var matched = map.ByEnvironment.FirstOrDefault(kv =>
+                    ServiceEnvironments.Normalize(kv.Key) == env);
+                if (!string.IsNullOrWhiteSpace(matched.Value))
+                {
+                    raw = matched.Value;
+                }
+                else if (!string.IsNullOrWhiteSpace(map.Scalar))
+                {
+                    raw = map.Scalar;
+                }
             }
 
             if (string.IsNullOrWhiteSpace(raw))
@@ -496,31 +527,6 @@ public sealed class CatalogSyncService(
 
     private static string? FirstNonEmpty(params string?[] values) =>
         values.Select(v => v?.Trim()).FirstOrDefault(v => !string.IsNullOrWhiteSpace(v));
-
-    private static string ResolveRegionalUrl(ServiceYamlEntry entry, ResolvedRegion region, string env)
-    {
-        if (region.Environments is not null &&
-            region.Environments.TryGetValue(env, out var explicitUrl) &&
-            !string.IsNullOrWhiteSpace(explicitUrl))
-        {
-            return explicitUrl.Trim();
-        }
-
-        if (entry.Environments is not null &&
-            entry.Environments.TryGetValue(env, out var template) &&
-            !string.IsNullOrWhiteSpace(template))
-        {
-            if (!template.Contains("{region}", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    $"Для региона '{region.Code}' нет URL среды '{env}' и шаблон не содержит {{region}}.");
-            }
-
-            return template.Replace("{region}", region.Code, StringComparison.OrdinalIgnoreCase).Trim();
-        }
-
-        throw new InvalidOperationException($"Не удалось собрать URL {entry.Name}/{region.Code}/{env}.");
-    }
 
     private async Task UpsertServiceAsync(ResolvedService resolved, CancellationToken cancellationToken)
     {

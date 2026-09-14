@@ -1,7 +1,6 @@
-import type { CatalogService, EnvironmentName } from '../api/types'
+import { environmentsOf, isProductionEnvironment, type CatalogService } from '../api/types'
 import { resolveBaseUrl, useWorkbench } from '../store/workbench'
-
-const ENV_OPTIONS: EnvironmentName[] = ['dev', 'stage', 'prod']
+import { useEffect, useMemo } from 'react'
 
 type Props = {
   service: CatalogService | undefined
@@ -17,16 +16,26 @@ export function EnvRegionBar({ service }: Props) {
   const region = service ? regionByServiceId[service.id] ?? service.defaultRegion ?? service.regions[0]?.code : undefined
   const module = service?.endpoints.find((item) => item.id === selectedEndpointId)?.module
   const baseUrl = resolveBaseUrl(service, environment, region, module)
+  const envOptions = useMemo(() => environmentsOf(service), [service])
+
+  useEffect(() => {
+    if (envOptions.length === 0) {
+      return
+    }
+    if (!envOptions.includes(environment)) {
+      setEnvironment(envOptions[0])
+    }
+  }, [environment, envOptions, setEnvironment])
 
   return (
     <div className="pane-bar">
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
         <div className="pills">
-          {ENV_OPTIONS.map((item) => (
+          {envOptions.map((item) => (
             <button
               key={item}
               type="button"
-              className={`pill${environment === item ? ' on' : ''}${item === 'prod' ? ' danger' : ''}`}
+              className={`pill${environment === item ? ' on' : ''}${isProductionEnvironment(item) ? ' danger' : ''}`}
               onClick={() => setEnvironment(item)}
             >
               {item}

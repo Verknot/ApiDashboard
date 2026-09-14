@@ -1,46 +1,104 @@
 # Catalog for API Workbench.
 # PFX: C:\pult-certs\*.pfx (Docker → /certs)
+# Portal = swagger download + urls + Send auth. No service-level environments/auth.
 
 splunk_url: 'https://splunk.company.com/en-US/app/KESCloud/search?earliest=-15m&latest=now&q=search%20index%3D"*"%20%7C%20search%20ConversationId%3D"#ConversationId#"&display.page.search.mode=smart&dispatch.sample_ratio=1'
 
 services:
-  # One root: UserPortal = token+cert, backend = cert only
   - name: order-service
     description: Управление заказами
     color: "#4CAF50"
     proxy: true
-    swagger:
+    portals:
       - name: UserPortal
-        url: http://localhost:5157/userportal/swagger.yml
-        auth: basic
-        username: u1
-        password: "123"
-        environments:
+        swagger:
+          url: http://localhost:5157/userportal/swagger.yml
+          basic:
+            username: u1
+            password: "123"
+        urls:
           dev: http://localhost:5157/userportal
-          stage: https://api.stage.company.com/userportal
-          prod: https://api.prod.company.com/userportal
-        api_auth:
+          qa: https://api.qa.company.com/userportal
+        auth:
           type: token
-          token_url:
-            dev: https://auth.dev.company.com/token
-            stage: https://auth.stage.company.com/token
-            prod: https://auth.prod.company.com/token
-          cert_path: client.pfx
-      - name: backend
-        url: https://host/swagger/backend/swagger.json
-        auth: basic
-        username: u1
-        password: "123"
-        environments:
-          dev: https://api.dev.company.com/order
-          stage: https://api.stage.company.com/order
-          prod: https://api.prod.company.com/order
-        api_auth:
+          token_url: https://auth.{environment}.company.com/token
+          cert: client.pfx
+          cert_password: "pfx-secret"
+
+      - name: BackOffice
+        swagger:
+          url: https://host/swagger/backoffice/swagger.json
+          basic:
+            username: u1
+            password: "123"
+        urls:
+          dev: https://api.dev.company.com/backoffice
+          qa: https://api.qa.company.com/backoffice
+        auth:
           type: certificate
-          cert_path: client.pfx
-    environments:
-      dev: http://localhost:5157/userportal
-      stage: https://api.stage.company.com/userportal
-      prod: https://api.prod.company.com/userportal
-    auth:
-      type: none
+          cert: client.pfx
+          cert_password: "pfx-secret"
+
+      - name: BackendPortal
+        swagger:
+          url: https://host/swagger/backend/swagger.json
+          basic:
+            username: u1
+            password: "123"
+        urls:
+          dev: https://api.dev.company.com/order
+          qa: https://api.qa.company.com/order
+        auth:
+          type: certificate
+          cert: client.pfx
+          cert_password: "pfx-secret"
+
+  - name: order-service-regional
+    description: Региональные заказы
+    color: "#9C27B0"
+    proxy: true
+    regions: [eu, tr, br, mx]
+    default_region: eu
+    portals:
+      - name: UserPortal
+        swagger:
+          url: https://api.dev.eu.company.com/userportal/swagger.yml
+          basic:
+            username: u1
+            password: "123"
+        urls:
+          dev: https://api.dev.{region}.company.com/userportal
+          qa: https://api.qa.{region}.company.com/userportal
+        auth:
+          type: token
+          token_url: https://auth.{environment}.{region}.company.com/token
+          cert: client.pfx
+          cert_password: "pfx-secret"
+
+      - name: BackOffice
+        swagger:
+          url: https://api.dev.eu.company.com/backoffice/swagger.json
+          basic:
+            username: u1
+            password: "123"
+        urls:
+          dev: https://api.dev.{region}.company.com/backoffice
+          qa: https://api.qa.{region}.company.com/backoffice
+        auth:
+          type: certificate
+          cert: client.pfx
+          cert_password: "pfx-secret"
+
+      - name: BackendPortal
+        swagger:
+          url: https://api.dev.eu.company.com/backend/swagger.json
+          basic:
+            username: u1
+            password: "123"
+        urls:
+          dev: https://api.dev.{region}.company.com/backend
+          qa: https://api.qa.{region}.company.com/backend
+        auth:
+          type: certificate
+          cert: client.pfx
+          cert_password: "pfx-secret"

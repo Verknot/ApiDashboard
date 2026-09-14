@@ -1,4 +1,30 @@
-export type EnvironmentName = 'dev' | 'stage' | 'prod'
+export type EnvironmentName = string
+
+export const ENVIRONMENT_ORDER = ['dev', 'qa', 'stage', 'uat', 'prod', 'production'] as const
+
+export function orderEnvironments(names: Iterable<string>): string[] {
+  const unique = [...new Set([...names].map((item) => item.trim().toLowerCase()).filter(Boolean))]
+  return unique.sort((a, b) => {
+    const ai = ENVIRONMENT_ORDER.indexOf(a as (typeof ENVIRONMENT_ORDER)[number])
+    const bi = ENVIRONMENT_ORDER.indexOf(b as (typeof ENVIRONMENT_ORDER)[number])
+    const ax = ai < 0 ? 1000 : ai
+    const bx = bi < 0 ? 1000 : bi
+    return ax === bx ? a.localeCompare(b) : ax - bx
+  })
+}
+
+export function isProductionEnvironment(name: string | null | undefined): boolean {
+  const env = (name ?? '').trim().toLowerCase()
+  return env === 'prod' || env === 'production' || env === 'live'
+}
+
+export function environmentsOf(service: { urls: { environment: string }[] } | null | undefined): string[] {
+  if (!service) {
+    return ['dev', 'stage', 'prod']
+  }
+  const fromUrls = orderEnvironments(service.urls.map((item) => item.environment))
+  return fromUrls.length > 0 ? fromUrls : ['dev', 'stage', 'prod']
+}
 
 export type Me = {
   id: number

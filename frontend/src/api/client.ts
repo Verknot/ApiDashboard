@@ -125,7 +125,7 @@ export async function saveConfig(content: string): Promise<ReloadConfigResponse>
 }
 
 export async function refreshSwagger(): Promise<SwaggerRefreshResponse> {
-  const { data } = await api.post<SwaggerRefreshResponse>('/admin/swagger/refresh')
+  const { data } = await api.post<SwaggerRefreshResponse>('/services/swagger/refresh')
   return data
 }
 

@@ -4,155 +4,114 @@
 splunk_url: 'https://splunk.company.com/en-US/app/search/search?q=search%20ConversationId%3D"#ConversationId#"'
 
 services:
-  # One root, different API auth per swagger module (api_auth)
   - name: order-service
-    description: Orders — UserPortal token, backend certificate
+    description: UserPortal = token+cert; BackOffice/Backend = certificate
     color: "#4CAF50"
     proxy: true
-    swagger:
+    portals:
       - name: UserPortal
-        url: https://api.dev.company.com/userportal/swagger.yml
-        auth: basic
-        username: swagger-reader
-        password: REPLACE
-        environments:
+        swagger:
+          url: https://api.dev.company.com/userportal/swagger.yml
+          basic:
+            username: swagger-reader
+            password: REPLACE
+            # vault_username: secret/swagger/user
+            # vault_password: secret/swagger/pass
+        urls:
           dev: https://api.dev.company.com/userportal
-          stage: https://api.stage.company.com/userportal
-          prod: https://api.prod.company.com/userportal
-        api_auth:
+          qa: https://api.qa.company.com/userportal
+        auth:
           type: token
-          token_url: https://auth.dev.company.com/token
-          cert_path: client.pfx
-      - name: backend
-        url: https://api.dev.company.com/order/swagger/v1/swagger.json
-        auth: none
-        environments:
-          dev: https://api.dev.company.com/order
-          stage: https://api.stage.company.com/order
-          prod: https://api.prod.company.com/order
-        api_auth:
+          token_url: https://auth.{environment}.company.com/token
+          cert: client.pfx
+          cert_password: REPLACE
+
+      - name: BackOffice
+        swagger:
+          url: https://api.dev.company.com/backoffice/swagger.json
+          basic:
+            username: swagger-reader
+            password: REPLACE
+        urls:
+          dev: https://api.dev.company.com/backoffice
+          qa: https://api.qa.company.com/backoffice
+        auth:
           type: certificate
-          cert_path: client.pfx
-    environments:
-      dev: https://api.dev.company.com/userportal
-      stage: https://api.stage.company.com/userportal
-      prod: https://api.prod.company.com/userportal
-    auth:
-      type: none
+          cert: client.pfx
+          cert_password: REPLACE
 
-  # Local sample swagger, no auth
-  - name: demo-local
-    description: Local sample OpenAPI
-    color: "#4CAF50"
-    proxy: true
-    swagger:
-      url: samples/order-service.json
-      auth: none
-    environments:
-      dev: http://localhost:5157/order
-      stage: https://api.stage.company.com/order
-      prod: https://api.prod.company.com/order
-    auth:
-      type: none
+      - name: BackendPortal
+        swagger:
+          url: https://api.dev.company.com/backend/swagger.json
+          basic:
+            username: swagger-reader
+            password: REPLACE
+        urls:
+          dev: https://api.dev.company.com/backend
+          qa: https://api.qa.company.com/backend
+        auth:
+          type: certificate
+          cert: client.pfx
+          cert_password: REPLACE
 
-  # Swagger behind Basic (creds in Vault). API via Bearer + PFX file
-  - name: order-service-single
-    description: Orders — swagger basic from Vault, API token + cert_path
-    color: "#4CAF50"
-    proxy: true
-    swagger:
-      url: https://api.dev.company.com/order/swagger/v1/swagger.json
-      auth: basic
-      vault_username: secret/swagger/order-service-login
-      vault_password: secret/swagger/order-service-password
-      # vault_base64: true
-    environments:
-      dev: https://api.dev.company.com/order
-      stage: https://api.stage.company.com/order
-      prod: https://api.prod.company.com/order
-    auth:
-      type: token
-      token_url: https://auth.dev.company.com/token
-      cert_path: client.pfx
-      cert_password: optional-pfx-password
-
-  # Client cert as Base64 in YAML (ok for demos; prefer Vault in real envs)
-  - name: payment-service
-    description: Payment — PFX as cert_base64
-    color: "#FF9800"
-    proxy: true
-    swagger:
-      url: https://api.dev.company.com/payment/swagger/v1/swagger.json
-      auth: none
-    environments:
-      dev: https://api.dev.company.com/payment
-      stage: https://api.stage.company.com/payment
-      prod: https://api.prod.company.com/payment
-    auth:
-      type: certificate
-      # PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('client.pfx'))
-      cert_base64: REPLACE_WITH_BASE64_PFX
-      cert_password: optional-pfx-password
-
-  # Client cert from Vault (recommended for cluster)
-  - name: user-service
-    description: Users — PFX from Vault, swagger basic + mTLS
-    color: "#2196F3"
-    proxy: true
-    swagger:
-      url: https://api.dev.company.com/user/swagger/v1/swagger.json
-      auth: basic
-      username: swagger-reader
-      password: REPLACE_OR_USE_VAULT
-      # or vault_path: secret/swagger/user-service
-    environments:
-      dev: https://api.dev.company.com/user
-      stage: https://api.stage.company.com/user
-      prod: https://api.prod.company.com/user
-    auth:
-      type: certificate
-      # Secret keys: certificate | cert_base64 | pfx  (+ password | cert_password)
-      cert_vault: secret/pult/client-cert#certificate
-      # cert_password: from YAML or from the same Vault secret
-
-  # Token fetch with cert from Vault; token_url per environment
-  - name: notify-service
-    description: Regional notify — token + cert_vault
+  - name: order-service-regional
+    description: Same portals, URLs per region
     color: "#9C27B0"
-    default_region: ru
     proxy: true
-    swagger:
-      url: samples/notify-service.json
-      auth: none
-    regions:
-      - code: ru
-        label: Russia
-      - code: kz
-        label: Kazakhstan
-    environments:
-      dev: https://notify.dev.{region}.company.com
-      stage: https://notify.stage.{region}.company.com
-      prod: https://notify.prod.{region}.company.com
-    auth:
-      type: token
-      token_url:
-        dev: https://auth.dev.company.com/token
-        stage: https://auth.stage.company.com/token
-        prod: https://auth.prod.company.com/token
-      cert_vault: secret/pult/client-cert
-      token_field: accessToken
+    regions: [eu, tr, br, mx]
+    default_region: eu
+    portals:
+      - name: UserPortal
+        swagger:
+          url: https://api.dev.eu.company.com/userportal/swagger.yml
+          basic:
+            username: swagger-reader
+            password: REPLACE
+        urls:
+          dev: https://api.dev.{region}.company.com/userportal
+          qa: https://api.qa.{region}.company.com/userportal
+        auth:
+          type: token
+          token_url: https://auth.{environment}.{region}.company.com/token
+          cert: client.pfx
+          cert_password: REPLACE
+      - name: BackOffice
+        swagger:
+          url: https://api.dev.eu.company.com/backoffice/swagger.json
+          basic:
+            username: swagger-reader
+            password: REPLACE
+        urls:
+          dev: https://api.dev.{region}.company.com/backoffice
+          qa: https://api.qa.{region}.company.com/backoffice
+        auth:
+          type: certificate
+          cert: client.pfx
+          cert_password: REPLACE
+      - name: BackendPortal
+        swagger:
+          url: https://api.dev.eu.company.com/backend/swagger.json
+          basic:
+            username: swagger-reader
+            password: REPLACE
+        urls:
+          dev: https://api.dev.{region}.company.com/backend
+          qa: https://api.qa.{region}.company.com/backend
+        auth:
+          type: certificate
+          cert: client.pfx
+          cert_password: REPLACE
 
-  # Browser Send (no server PFX). User picks cert in Windows if API needs mTLS.
-  - name: browser-direct
-    description: Direct from browser — needs CORS on target API
-    color: "#00BCD4"
-    proxy: false
-    swagger:
-      url: https://api.dev.company.com/geo/swagger/v1/swagger.json
-      auth: none
-    environments:
-      dev: https://api.dev.company.com/geo
-      stage: https://api.stage.company.com/geo
-      prod: https://api.prod.company.com/geo
-    auth:
-      type: none
+  # Local sample OpenAPI (no Basic)
+  - name: demo-local
+    description: Local sample
+    color: "#607D8B"
+    proxy: true
+    portals:
+      - name: Orders
+        swagger:
+          url: samples/order-service.json
+        urls:
+          dev: http://localhost:5157/order
+        auth:
+          type: none

@@ -77,7 +77,7 @@ export function AppLayout() {
       </aside>
       <div className="stage">
         <header className="topbar">
-          <span>dev / stage / prod · regions in catalog</span>
+          <span>environments from services.yaml · regions in catalog</span>
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
             <span className="status-dot" />
             local

@@ -11,7 +11,6 @@ namespace ApiWorkbench.Api.Controllers;
 [Route("api/admin")]
 public sealed class AdminController(
     ICatalogSyncService catalogSync,
-    ISwaggerIngestService swaggerIngest,
     ILogger<AdminController> logger) : ControllerBase
 {
     /// <summary>Текущий текст services.yaml.</summary>
@@ -80,18 +79,5 @@ public sealed class AdminController(
         {
             return NotFound(new { message = ex.Message });
         }
-    }
-
-    /// <summary>Стягивает swagger.json со всех сервисов (F-SWAG-1, F-ADMIN-5).</summary>
-    [HttpPost("swagger/refresh")]
-    public async Task<ActionResult<SwaggerRefreshResponse>> RefreshSwagger(CancellationToken cancellationToken)
-    {
-        var result = await swaggerIngest.RefreshAllAsync(cancellationToken);
-        logger.LogInformation("Swagger refresh: ok={Ok}, failed={Failed}", result.Ok, result.Failed);
-        return Ok(new SwaggerRefreshResponse(
-            result.Ok,
-            result.Failed,
-            result.Services.Select(s => new SwaggerServiceRefreshResponse(
-                s.Service, s.Status, s.Endpoints, s.Error, s.Added, s.Removed, s.Changed)).ToList()));
     }
 }

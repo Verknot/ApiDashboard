@@ -1,13 +1,15 @@
 import { useMemo, useState } from 'react'
 import { allEndpointTags } from '../api/schema'
 import type { CatalogService, ServiceEndpoint } from '../api/types'
-import { IconChevronRight, IconCloudOff, IconPlus, IconSearch, IconStar } from '../icons'
+import { IconChevronRight, IconCloudOff, IconPlus, IconRefresh, IconSearch, IconStar } from '../icons'
 import { useFavorites, useWorkbench } from '../store/workbench'
 
 type Props = {
   services: CatalogService[]
   loading?: boolean
   onOpenFree?: () => void
+  onRefreshSwagger?: () => void
+  refreshingSwagger?: boolean
 }
 
 type TaggedEndpoints = {
@@ -108,7 +110,7 @@ function moduleKey(serviceId: number, module: string): string {
   return `${serviceId}::${module}`
 }
 
-export function ServiceTree({ services, loading, onOpenFree }: Props) {
+export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, refreshingSwagger }: Props) {
   const [query, setQuery] = useState('')
   const [collapsedServices, setCollapsedServices] = useState<number[]>([])
   const [collapsedTags, setCollapsedTags] = useState<string[]>([])
@@ -211,6 +213,18 @@ export function ServiceTree({ services, loading, onOpenFree }: Props) {
           Services
         </p>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+          {onRefreshSwagger ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-compact tree-fold"
+              title="Refresh swagger for all services"
+              disabled={refreshingSwagger}
+              onClick={onRefreshSwagger}
+            >
+              <IconRefresh size={14} />
+              {refreshingSwagger ? '…' : 'Swagger'}
+            </button>
+          ) : null}
           {onOpenFree ? (
             <button type="button" className="btn btn-ghost btn-compact tree-fold" title="Open free request" onClick={onOpenFree}>
               <IconPlus size={14} />

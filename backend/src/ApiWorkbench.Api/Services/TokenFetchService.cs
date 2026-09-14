@@ -32,10 +32,12 @@ public sealed class TokenFetchService(
         CancellationToken cancellationToken = default)
     {
         var env = environment.Trim().ToLowerInvariant();
-        if (!ServiceEnvironments.All.Contains(env))
+        if (string.IsNullOrWhiteSpace(env))
         {
-            throw new InvalidOperationException($"Неизвестная среда '{environment}'.");
+            throw new InvalidOperationException("Environment is required.");
         }
+
+        _ = ServiceEnvironments.Normalize(env);
 
         var service = await db.Services
             .AsNoTracking()
@@ -52,7 +54,7 @@ public sealed class TokenFetchService(
             throw new InvalidOperationException(
                 string.IsNullOrEmpty(moduleName)
                     ? "У сервиса auth.type не token."
-                    : $"У модуля '{moduleName}' api_auth.type не token.");
+                    : $"У portal '{moduleName}' auth.type не token.");
         }
 
         var region = service.IsRegional ? (regionCode ?? service.DefaultRegion ?? string.Empty).Trim().ToLowerInvariant() : string.Empty;
@@ -62,7 +64,7 @@ public sealed class TokenFetchService(
             throw new InvalidOperationException(
                 string.IsNullOrEmpty(moduleName)
                     ? $"Нет auth.token_url для среды '{env}'."
-                    : $"Нет api_auth.token_url у модуля '{moduleName}' для среды '{env}'.");
+                    : $"Нет auth.token_url у portal '{moduleName}' для среды '{env}'.");
         }
 
         var target = ResolveTarget(tokenUrl.Url, service, env, region, moduleName);
@@ -74,7 +76,7 @@ public sealed class TokenFetchService(
         if (!auth.NeedsClientCertificate)
         {
             throw new InvalidOperationException(
-                "Token fetch needs a client certificate: auth/api_auth.cert_path, cert_base64, or cert_vault.");
+                "Token fetch needs a client certificate: auth.cert, cert_base64, or cert_vault.");
         }
 
         var (client, dispose) = CreateClient(auth, service.Name);

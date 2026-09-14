@@ -15,7 +15,7 @@ import {
 import { applyParametersToUrl, useEndpointParameters } from '../api/parameters'
 import { isBlankRequestBody, prettyJson, seedRequestBody } from '../api/schema'
 import type { CatalogService, HistoryItem, RequestTemplate, ServiceEndpoint } from '../api/types'
-import { normalizeResponseHeaders } from '../api/types'
+import { isProductionEnvironment, normalizeResponseHeaders } from '../api/types'
 import {
   IconCopy,
   IconDeviceFloppy,
@@ -233,9 +233,9 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
       }
     }
 
-    if (environment === 'prod') {
+    if (isProductionEnvironment(environment)) {
       Modal.confirm({
-        title: 'Send to prod',
+        title: `Send to ${environment}`,
         content: `${service.name}${region ? ` · ${region}` : ''}\n${url}`,
         okText: 'Send',
         cancelText: 'Cancel',

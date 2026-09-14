@@ -14,41 +14,41 @@ public sealed class ServiceYamlEntry
     public bool? Proxy { get; set; }
     public string? SplunkUrl { get; set; }
     public string? DefaultRegion { get; set; }
-    public SwaggerYamlList? Swagger { get; set; }
-    public Dictionary<string, string>? Environments { get; set; }
-    public List<RegionYaml>? Regions { get; set; }
+    public List<PortalYaml>? Portals { get; set; }
+    public RegionYamlList? Regions { get; set; }
+}
+
+/// <summary>One OpenAPI surface under a service (UserPortal, BackOffice, BackendPortal…).</summary>
+public sealed class PortalYaml
+{
+    public string Name { get; set; } = string.Empty;
+    public SwaggerDownloadYaml? Swagger { get; set; }
+    public Dictionary<string, string>? Urls { get; set; }
     public AuthYaml? Auth { get; set; }
 }
 
-public sealed class SwaggerYaml
+public sealed class SwaggerDownloadYaml
 {
-    public string Auth { get; set; } = "none";
-    public string? Name { get; set; }
     public string? Url { get; set; }
-    public string? Username { get; set; }
-    public string? Password { get; set; }
-    public string? VaultPath { get; set; }
-    public string? VaultUsername { get; set; }
-    public string? VaultPassword { get; set; }
-    public bool VaultBase64 { get; set; }
-    public Dictionary<string, string>? Environments { get; set; }
-    public SwaggerVaultYaml? Vault { get; set; }
-
-    /// <summary>API Send auth for this swagger module (overrides service auth).</summary>
-    public AuthYaml? ApiAuth { get; set; }
+    public SwaggerBasicYaml? Basic { get; set; }
 }
 
-public sealed class SwaggerVaultYaml
+public sealed class SwaggerBasicYaml
 {
-    public string? Path { get; set; }
     public string? Username { get; set; }
     public string? Password { get; set; }
-    public bool Base64 { get; set; }
+    public string? VaultUsername { get; set; }
+    public string? VaultPassword { get; set; }
+    public string? VaultPath { get; set; }
+    public bool VaultBase64 { get; set; }
 }
 
 public sealed class AuthYaml
 {
     public string Type { get; set; } = "none";
+
+    /// <summary>Short alias for cert_path (file under C:\pult-certs).</summary>
+    public string? Cert { get; set; }
     public string? CertPath { get; set; }
     public string? CertBase64 { get; set; }
     public string? CertVault { get; set; }
@@ -62,6 +62,9 @@ public sealed class AuthYaml
     public bool VaultBase64 { get; set; }
     public Dictionary<string, string>? TokenBody { get; set; }
     public string? TokenField { get; set; }
+
+    public string? ResolvedCertPath =>
+        string.IsNullOrWhiteSpace(CertPath) ? Cert?.Trim() : CertPath.Trim();
 }
 
 public sealed class RegionYaml
@@ -69,7 +72,6 @@ public sealed class RegionYaml
     public string Code { get; set; } = string.Empty;
     public string? Label { get; set; }
     public Dictionary<string, string>? Environments { get; set; }
-    public string? SwaggerUrl { get; set; }
 }
 
 public sealed class JwtOptions
@@ -97,22 +99,8 @@ public sealed class VaultOptions
     public string Address { get; set; } = string.Empty;
     public string Token { get; set; } = string.Empty;
 
-    /// <summary>
-    /// Optional Vault KV path for Postgres connection string when ConnectionStrings:Default is empty.
-    /// Example: secret/pult/db#connectionString
-    /// </summary>
     public string? ConnectionStringPath { get; set; }
-
-    /// <summary>
-    /// Optional Vault KV path for Jwt:Key when Jwt:Key is empty.
-    /// Example: secret/pult/app#jwtKey
-    /// </summary>
     public string? JwtKeyPath { get; set; }
-
-    /// <summary>
-    /// Optional Vault KV path for Seed:AdminPassword when Seed:AdminPassword is empty.
-    /// Example: secret/pult/app#adminPassword
-    /// </summary>
     public string? SeedAdminPasswordPath { get; set; }
 }
 
@@ -123,5 +111,35 @@ public static class AuthCookieNames
 
 public static class ServiceEnvironments
 {
-    public static readonly string[] All = ["dev", "stage", "prod"];
+    public static readonly string[] PreferredOrder = ["dev", "qa", "stage", "uat", "prod", "production"];
+
+    public static string Normalize(string? name)
+    {
+        var env = (name ?? string.Empty).Trim().ToLowerInvariant();
+        if (env.Length is < 1 or > 20 || !env.All(static c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_'))
+        {
+            throw new InvalidOperationException(
+                $"Некорректное имя среды '{name}'. Допустимы a-z, 0-9, -, _ (1–20 символов).");
+        }
+
+        return env;
+    }
+
+    public static bool IsProductionLike(string? name)
+    {
+        var env = (name ?? string.Empty).Trim().ToLowerInvariant();
+        return env is "prod" or "production" or "live";
+    }
+
+    public static IReadOnlyList<string> Order(IEnumerable<string> names) =>
+        names
+            .Select(Normalize)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name =>
+            {
+                var idx = Array.FindIndex(PreferredOrder, item => item.Equals(name, StringComparison.OrdinalIgnoreCase));
+                return idx < 0 ? 1000 : idx;
+            })
+            .ThenBy(name => name, StringComparer.Ordinal)
+            .ToList();
 }

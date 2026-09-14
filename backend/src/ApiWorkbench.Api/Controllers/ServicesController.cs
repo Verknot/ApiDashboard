@@ -16,7 +16,9 @@ public sealed class ServicesController(
     AppDbContext db,
     IPermissionService permissions,
     IContractDiffService contractDiff,
-    ITokenFetchService tokens) : ControllerBase
+    ITokenFetchService tokens,
+    ISwaggerIngestService swaggerIngest,
+    ILogger<ServicesController> logger) : ControllerBase
 {
     /// <summary>Каталог сервисов с регионами и URL по средам. Фильтр по RBAC (F-RBAC-4 / F-CFG-6).</summary>
     [HttpGet]
@@ -188,6 +190,19 @@ public sealed class ServicesController(
         {
             return BadRequest(new { message = ex.Message });
         }
+    }
+
+    /// <summary>Стягивает swagger со всех видимых сервисов (доступно любому залогиненному).</summary>
+    [HttpPost("swagger/refresh")]
+    public async Task<ActionResult<SwaggerRefreshResponse>> RefreshSwagger(CancellationToken cancellationToken)
+    {
+        var result = await swaggerIngest.RefreshAllAsync(cancellationToken);
+        logger.LogInformation("Swagger refresh: ok={Ok}, failed={Failed}", result.Ok, result.Failed);
+        return Ok(new SwaggerRefreshResponse(
+            result.Ok,
+            result.Failed,
+            result.Services.Select(s => new SwaggerServiceRefreshResponse(
+                s.Service, s.Status, s.Endpoints, s.Error, s.Added, s.Removed, s.Changed)).ToList()));
     }
 
     private async Task<ActionResult?> ForbidService(int serviceId, CancellationToken cancellationToken)

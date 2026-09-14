@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react'
 
 const STORAGE_KEY = 'api-workbench-catalog-width'
-const MIN = 220
-const MAX = 560
-const DEFAULT = 300
+const MIN = 240
+const MAX = 640
+const DEFAULT = 400
+const LEGACY_DEFAULT = 300
 
 type Props = {
   left: ReactNode
@@ -12,7 +13,8 @@ type Props = {
 
 function readWidth(): number {
   const raw = Number(localStorage.getItem(STORAGE_KEY))
-  if (!Number.isFinite(raw)) {
+  if (!Number.isFinite(raw) || raw === LEGACY_DEFAULT) {
+    localStorage.setItem(STORAGE_KEY, String(DEFAULT))
     return DEFAULT
   }
   return Math.min(MAX, Math.max(MIN, raw))
