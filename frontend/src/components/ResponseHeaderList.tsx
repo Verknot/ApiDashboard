@@ -5,18 +5,16 @@ type Props = {
   headers: Record<string, string>
   splunkUrl?: string | null
   mode?: 'proxy' | 'browser'
-  /** When true, headers start expanded. Default collapsed. */
-  defaultOpen?: boolean
 }
 
-export function ResponseHeaderList({ headers, splunkUrl, mode, defaultOpen = false }: Props) {
+export function ResponseHeaderList({ headers, splunkUrl, mode }: Props) {
   const rows = Object.entries(headers).sort(([a], [b]) => a.localeCompare(b))
   if (rows.length === 0) {
     return null
   }
 
   return (
-    <details className="response-headers" defaultOpen={defaultOpen}>
+    <details className="response-headers">
       <summary>
         Response headers
         <span className="meta" style={{ marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
