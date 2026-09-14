@@ -1,0 +1,23 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "Payment Service", "version": "1.0.0" },
+  "paths": {
+    "/payments": {
+      "post": {
+        "tags": ["Payments"],
+        "operationId": "CreatePayment",
+        "summary": "Провести платёж",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/payments/{id}": {
+      "get": {
+        "tags": ["Payments"],
+        "operationId": "GetPayment",
+        "summary": "Статус платежа",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  }
+}

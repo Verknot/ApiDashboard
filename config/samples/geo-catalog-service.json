@@ -1,0 +1,31 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "Geo Catalog", "version": "1.0.0" },
+  "paths": {
+    "/items": {
+      "get": {
+        "tags": ["Catalog"],
+        "operationId": "ListItems",
+        "summary": "Позиции каталога",
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/items/{sku}": {
+      "get": {
+        "tags": ["Catalog"],
+        "operationId": "GetItem",
+        "summary": "Позиция по SKU",
+        "parameters": [{ "name": "sku", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      }
+    },
+    "/availability": {
+      "get": {
+        "tags": ["Stock"],
+        "operationId": "GetAvailability",
+        "summary": "Остатки по региону",
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,62 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "Order Service", "version": "1.0.0" },
+  "paths": {
+    "/orders": {
+      "get": {
+        "tags": ["Orders"],
+        "operationId": "ListOrders",
+        "summary": "Список заказов",
+        "responses": { "200": { "description": "OK" } }
+      },
+      "post": {
+        "tags": ["Orders"],
+        "operationId": "CreateOrder",
+        "summary": "Создать заказ",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "customerId": { "type": "string" },
+                  "amount": { "type": "number" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "201": { "description": "Created" } }
+      }
+    },
+    "/orders/{id}": {
+      "get": {
+        "tags": ["Orders"],
+        "operationId": "GetOrder",
+        "summary": "Заказ по id",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "responses": { "200": { "description": "OK" } }
+      },
+      "post": {
+        "tags": ["Orders"],
+        "operationId": "CancelOrder",
+        "summary": "Отменить заказ",
+        "parameters": [{ "name": "id", "in": "path", "required": true, "schema": { "type": "string" } }],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  }
+}

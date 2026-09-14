@@ -1,0 +1,22 @@
+{
+  "openapi": "3.0.1",
+  "info": { "title": "Notify Service", "version": "1.0.0" },
+  "paths": {
+    "/notifications": {
+      "post": {
+        "tags": ["Notifications"],
+        "operationId": "SendNotification",
+        "summary": "Отправить уведомление",
+        "responses": { "202": { "description": "Accepted" } }
+      }
+    },
+    "/templates": {
+      "get": {
+        "tags": ["Templates"],
+        "operationId": "ListTemplates",
+        "summary": "Шаблоны сообщений",
+        "responses": { "200": { "description": "OK" } }
+      }
+    }
+  }
+}

@@ -1,0 +1,122 @@
+# Example catalog for API Workbench.
+# Copy pieces into services.yaml. Do not put real PFX / passwords in git.
+
+splunk_url: 'https://splunk.company.com/en-US/app/search/search?q=search%20ConversationId%3D"#ConversationId#"'
+
+services:
+  # Local sample swagger, no auth
+  - name: demo-local
+    description: Local sample OpenAPI
+    color: "#4CAF50"
+    proxy: true
+    swagger:
+      url: samples/order-service.json
+      auth: none
+    environments:
+      dev: http://localhost:5157/order
+      stage: https://api.stage.company.com/order
+      prod: https://api.prod.company.com/order
+    auth:
+      type: none
+
+  # Swagger behind Basic (creds in Vault). API via Bearer + PFX file
+  - name: order-service
+    description: Orders — swagger basic from Vault, API token + cert_path
+    color: "#4CAF50"
+    proxy: true
+    swagger:
+      url: https://api.dev.company.com/order/swagger/v1/swagger.json
+      auth: basic
+      vault_username: secret/swagger/order-service-login
+      vault_password: secret/swagger/order-service-password
+      # vault_base64: true
+    environments:
+      dev: https://api.dev.company.com/order
+      stage: https://api.stage.company.com/order
+      prod: https://api.prod.company.com/order
+    auth:
+      type: token
+      token_url: https://auth.dev.company.com/token
+      cert_path: client.pfx
+      cert_password: optional-pfx-password
+
+  # Client cert as Base64 in YAML (ok for demos; prefer Vault in real envs)
+  - name: payment-service
+    description: Payment — PFX as cert_base64
+    color: "#FF9800"
+    proxy: true
+    swagger:
+      url: https://api.dev.company.com/payment/swagger/v1/swagger.json
+      auth: none
+    environments:
+      dev: https://api.dev.company.com/payment
+      stage: https://api.stage.company.com/payment
+      prod: https://api.prod.company.com/payment
+    auth:
+      type: certificate
+      # PowerShell: [Convert]::ToBase64String([IO.File]::ReadAllBytes('client.pfx'))
+      cert_base64: REPLACE_WITH_BASE64_PFX
+      cert_password: optional-pfx-password
+
+  # Client cert from Vault (recommended for cluster)
+  - name: user-service
+    description: Users — PFX from Vault, swagger basic + mTLS
+    color: "#2196F3"
+    proxy: true
+    swagger:
+      url: https://api.dev.company.com/user/swagger/v1/swagger.json
+      auth: basic
+      username: swagger-reader
+      password: REPLACE_OR_USE_VAULT
+      # or vault_path: secret/swagger/user-service
+    environments:
+      dev: https://api.dev.company.com/user
+      stage: https://api.stage.company.com/user
+      prod: https://api.prod.company.com/user
+    auth:
+      type: certificate
+      # Secret keys: certificate | cert_base64 | pfx  (+ password | cert_password)
+      cert_vault: secret/pult/client-cert#certificate
+      # cert_password: from YAML or from the same Vault secret
+
+  # Token fetch with cert from Vault; token_url per environment
+  - name: notify-service
+    description: Regional notify — token + cert_vault
+    color: "#9C27B0"
+    default_region: ru
+    proxy: true
+    swagger:
+      url: samples/notify-service.json
+      auth: none
+    regions:
+      - code: ru
+        label: Russia
+      - code: kz
+        label: Kazakhstan
+    environments:
+      dev: https://notify.dev.{region}.company.com
+      stage: https://notify.stage.{region}.company.com
+      prod: https://notify.prod.{region}.company.com
+    auth:
+      type: token
+      token_url:
+        dev: https://auth.dev.company.com/token
+        stage: https://auth.stage.company.com/token
+        prod: https://auth.prod.company.com/token
+      cert_vault: secret/pult/client-cert
+      token_field: accessToken
+
+  # Browser Send (no server PFX). User picks cert in Windows if API needs mTLS.
+  - name: browser-direct
+    description: Direct from browser — needs CORS on target API
+    color: "#00BCD4"
+    proxy: false
+    swagger:
+      url: https://api.dev.company.com/geo/swagger/v1/swagger.json
+      auth: none
+    environments:
+      dev: https://api.dev.company.com/geo
+      stage: https://api.stage.company.com/geo
+      prod: https://api.prod.company.com/geo
+    auth:
+      type: none

@@ -1,0 +1,69 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: workbench
+      POSTGRES_PASSWORD: workbench
+      POSTGRES_DB: api_workbench
+    ports:
+      - "5444:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workbench -d api_workbench"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  vault:
+    image: hashicorp/vault:1.15
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: root
+      VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+    command: server -dev
+    ports:
+      - "8200:8200"
+
+  api:
+    build:
+      context: .
+      dockerfile: backend/src/ApiWorkbench.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__Default: Host=postgres;Port=5432;Database=api_workbench;Username=workbench;Password=workbench
+      Jwt__Key: sprint0-dev-signing-key-change-me-32ch
+      Vault__Address: http://vault:8200
+      Vault__Token: root
+      ServicesConfigPath: /app/config/services.yaml
+      Cors__Origins__0: http://localhost:8088
+      Seed__AdminEmail: admin@local
+      Seed__AdminPassword: Admin123!
+    ports:
+      - "5080:8080"
+    volumes:
+      - ./config:/app/config:ro
+      # On each Windows host: create C:\pult-certs and put *.pfx there
+      - C:/pult-certs:/certs:ro
+      - C:/pult-certs:/app/certs:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      vault:
+        condition: service_started
+
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      API_UPSTREAM: api:8080
+    ports:
+      - "8088:80"
+    depends_on:
+      - api
+
+volumes:
+  pgdata:

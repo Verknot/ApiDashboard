@@ -1,0 +1,11 @@
+.git
+.cursor
+**/.vs
+**/bin
+**/obj
+**/node_modules
+frontend/dist
+frontend/node_modules
+**/*.user
+**/*.md
+agent-transcripts
