@@ -26,13 +26,21 @@ internal static class OpenApiSchemaSupport
     }
 
     public static OpenApiSchema? Inline(OpenApiDocument document, OpenApiSchema? schema) =>
-        Inline(document, schema, new HashSet<string>(StringComparer.Ordinal));
+        Inline(document, schema, new HashSet<string>(StringComparer.Ordinal), 0);
 
-    private static OpenApiSchema? Inline(OpenApiDocument document, OpenApiSchema? schema, HashSet<string> seen)
+    private const int MaxInlineDepth = 12;
+    private const int MaxJsonDepth = 20;
+
+    private static OpenApiSchema? Inline(OpenApiDocument document, OpenApiSchema? schema, HashSet<string> seen, int depth)
     {
         if (schema is null)
         {
             return null;
+        }
+
+        if (depth >= MaxInlineDepth)
+        {
+            return new OpenApiSchema { Type = "object", Description = "truncated schema depth" };
         }
 
         var current = schema;
@@ -53,33 +61,34 @@ internal static class OpenApiSchemaSupport
         {
             foreach (var key in current.Properties.Keys.ToList())
             {
-                current.Properties[key] = Inline(document, current.Properties[key], seen) ?? current.Properties[key];
+                current.Properties[key] = Inline(document, current.Properties[key], seen, depth + 1) ?? current.Properties[key];
             }
         }
 
         if (current.Items is not null)
         {
-            current.Items = Inline(document, current.Items, seen);
+            current.Items = Inline(document, current.Items, seen, depth + 1);
         }
 
         if (current.AllOf is { Count: > 0 })
         {
-            current.AllOf = current.AllOf.Select(part => Inline(document, part, seen) ?? part).ToList();
+            current.AllOf = current.AllOf.Select(part => Inline(document, part, seen, depth + 1) ?? part).ToList();
         }
 
         if (current.OneOf is { Count: > 0 })
         {
-            current.OneOf = current.OneOf.Select(part => Inline(document, part, seen) ?? part).ToList();
+            current.OneOf = current.OneOf.Select(part => Inline(document, part, seen, depth + 1) ?? part).ToList();
         }
 
         if (current.AnyOf is { Count: > 0 })
         {
-            current.AnyOf = current.AnyOf.Select(part => Inline(document, part, seen) ?? part).ToList();
+            current.AnyOf = current.AnyOf.Select(part => Inline(document, part, seen, depth + 1) ?? part).ToList();
         }
 
         if (current.AdditionalProperties is not null)
         {
-            current.AdditionalProperties = Inline(document, current.AdditionalProperties, seen) ?? current.AdditionalProperties;
+            current.AdditionalProperties =
+                Inline(document, current.AdditionalProperties, seen, depth + 1) ?? current.AdditionalProperties;
         }
 
         return current;
@@ -92,7 +101,79 @@ internal static class OpenApiSchemaSupport
             return schema;
         }
 
-        return ResolveElement(schema.Value, document, 0);
+        return LimitDepth(ResolveElement(schema.Value, document, 0), MaxJsonDepth);
+    }
+
+    /// <summary>Keeps JSON tree within a safe depth for System.Text.Json writers (default max 32).</summary>
+    public static JsonElement? LimitDepth(JsonElement? source, int maxDepth = MaxJsonDepth)
+    {
+        if (source is null || source.Value.ValueKind is JsonValueKind.Undefined or JsonValueKind.Null)
+        {
+            return source;
+        }
+
+        try
+        {
+            using var buffer = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(buffer, new JsonWriterOptions { MaxDepth = Math.Max(maxDepth + 4, 64) }))
+            {
+                WriteLimited(source.Value, writer, 0, maxDepth);
+            }
+
+            return JsonDocument.Parse(buffer.ToArray()).RootElement.Clone();
+        }
+        catch (Exception)
+        {
+            return JsonSerializer.SerializeToElement(new { type = "object", description = "schema omitted (too deep)" });
+        }
+    }
+
+    private static void WriteLimited(JsonElement element, Utf8JsonWriter writer, int depth, int maxDepth)
+    {
+        if (depth >= maxDepth)
+        {
+            switch (element.ValueKind)
+            {
+                case JsonValueKind.Object:
+                    writer.WriteStartObject();
+                    writer.WriteString("type", "object");
+                    writer.WriteEndObject();
+                    return;
+                case JsonValueKind.Array:
+                    writer.WriteStartArray();
+                    writer.WriteEndArray();
+                    return;
+                default:
+                    element.WriteTo(writer);
+                    return;
+            }
+        }
+
+        switch (element.ValueKind)
+        {
+            case JsonValueKind.Object:
+                writer.WriteStartObject();
+                foreach (var property in element.EnumerateObject())
+                {
+                    writer.WritePropertyName(property.Name);
+                    WriteLimited(property.Value, writer, depth + 1, maxDepth);
+                }
+
+                writer.WriteEndObject();
+                break;
+            case JsonValueKind.Array:
+                writer.WriteStartArray();
+                foreach (var item in element.EnumerateArray())
+                {
+                    WriteLimited(item, writer, depth + 1, maxDepth);
+                }
+
+                writer.WriteEndArray();
+                break;
+            default:
+                element.WriteTo(writer);
+                break;
+        }
     }
 
     public static JsonElement? ExampleElement(JsonElement? schema, JsonElement? document)
@@ -109,7 +190,7 @@ internal static class OpenApiSchemaSupport
             example = new Dictionary<string, object?>();
         }
 
-        return JsonSerializer.SerializeToElement(example);
+        return JsonSerializer.SerializeToElement(example, new JsonSerializerOptions { MaxDepth = 64 });
     }
 
     public static OpenApiMediaType? PickJsonContent(IDictionary<string, OpenApiMediaType>? content)

@@ -225,7 +225,8 @@ public sealed class ServicesController(
     internal static EndpointResponse MapEndpoint(Domain.EndpointEntity e, System.Text.Json.JsonDocument? snapshot = null)
     {
         var document = snapshot?.RootElement;
-        var requestSchema = JsonDocs.ToElement(e.RequestSchema);
+        var requestSchema = OpenApiSchemaSupport.LimitDepth(JsonDocs.ToElement(e.RequestSchema));
+        var responseSchema = OpenApiSchemaSupport.LimitDepth(JsonDocs.ToElement(e.ResponseSchema));
         return new(
             e.Id,
             e.Method,
@@ -236,7 +237,7 @@ public sealed class ServicesController(
             e.UserTags,
             e.Module ?? string.Empty,
             OpenApiSchemaSupport.ResolveElement(requestSchema, document),
-            JsonDocs.ToElement(e.ResponseSchema),
+            responseSchema,
             OpenApiSchemaSupport.ExampleElement(requestSchema, document),
             JsonDocs.ToElement(e.Parameters));
     }

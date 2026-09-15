@@ -620,7 +620,16 @@ public sealed class SwaggerIngestService(
         }
 
         var json = schema.SerializeAsJson(OpenApiSpecVersion.OpenApi3_0);
-        return string.IsNullOrWhiteSpace(json) ? null : JsonDocument.Parse(json);
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return null;
+        }
+
+        using var parsed = JsonDocument.Parse(json);
+        var limited = OpenApiSchemaSupport.LimitDepth(parsed.RootElement);
+        return limited is null
+            ? null
+            : JsonDocument.Parse(limited.Value.GetRawText());
     }
 
     private static bool IsLocalSource(string source) =>
