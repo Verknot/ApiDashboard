@@ -225,3 +225,19 @@ public sealed class RequestTemplate
     public User User { get; set; } = null!;
     public EndpointEntity Endpoint { get; set; } = null!;
 }
+
+public sealed class UserPin
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public string Alias { get; set; } = string.Empty;
+    public string Value { get; set; } = string.Empty;
+    public string? Comment { get; set; }
+    public string? SourceKey { get; set; }
+    public int? ServiceId { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    public User User { get; set; } = null!;
+    public ServiceEntity? Service { get; set; }
+}

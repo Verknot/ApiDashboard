@@ -18,6 +18,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ContractSnapshot> ContractSnapshots => Set<ContractSnapshot>();
     public DbSet<RequestHistory> RequestHistory => Set<RequestHistory>();
     public DbSet<RequestTemplate> RequestTemplates => Set<RequestTemplate>();
+    public DbSet<UserPin> UserPins => Set<UserPin>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -280,6 +281,30 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
                 .WithMany()
                 .HasForeignKey(x => x.EndpointId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserPin>(entity =>
+        {
+            entity.ToTable("user_pins");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Alias).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.Value).HasMaxLength(500).IsRequired();
+            entity.Property(x => x.Comment).HasMaxLength(500);
+            entity.Property(x => x.SourceKey).HasMaxLength(200);
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+            entity.Property(x => x.UpdatedAt).HasDefaultValueSql("NOW()");
+            entity.HasIndex(x => new { x.UserId, x.Alias }).IsUnique()
+                .HasDatabaseName("ix_user_pins_user_alias");
+            entity.HasIndex(x => new { x.UserId, x.UpdatedAt }).IsDescending(false, true)
+                .HasDatabaseName("ix_user_pins_user_updated");
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Service)
+                .WithMany()
+                .HasForeignKey(x => x.ServiceId)
+                .OnDelete(DeleteBehavior.SetNull);
         });
     }
 }

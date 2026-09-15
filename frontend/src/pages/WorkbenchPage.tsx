@@ -5,6 +5,8 @@ import { prettyJson } from '../api/schema'
 import type { CatalogService, ServiceEndpoint } from '../api/types'
 import { EnvRegionBar } from '../components/EnvRegionBar'
 import { FreeRequestPane } from '../components/FreeRequestPane'
+import { PinDialog } from '../components/PinDialog'
+import { PinsPanel } from '../components/PinsPanel'
 import { RequestPane } from '../components/RequestPane'
 import { ResizableWorkbench } from '../components/ResizableWorkbench'
 import { ServiceTree } from '../components/ServiceTree'
@@ -138,8 +140,10 @@ export function WorkbenchPage() {
 
   return (
     <>
-      <p className="page-kicker">Request</p>
-      <h1 className="page-title">{tabTitle}</h1>
+      <div className="page-head page-head-compact">
+        <p className="page-kicker">Request</p>
+        <h1 className="page-title">{tabTitle}</h1>
+      </div>
       {tabs.length > 0 ? (
         <div className="tabs">
           {tabs.map((tab) => {
@@ -190,13 +194,16 @@ export function WorkbenchPage() {
       ) : null}
       <ResizableWorkbench
         left={
-          <ServiceTree
-            services={services}
-            loading={loading}
-            onOpenFree={canSend ? () => openFreeTab() : undefined}
-            onRefreshSwagger={() => void onRefreshSwagger()}
-            refreshingSwagger={refreshingSwagger}
-          />
+          <div className="catalog-stack">
+            <PinsPanel />
+            <ServiceTree
+              services={services}
+              loading={loading}
+              onOpenFree={canSend ? () => openFreeTab() : undefined}
+              onRefreshSwagger={() => void onRefreshSwagger()}
+              refreshingSwagger={refreshingSwagger}
+            />
+          </div>
         }
         right={
           <>
@@ -268,6 +275,7 @@ export function WorkbenchPage() {
           </>
         }
       />
+      <PinDialog />
     </>
   )
 }

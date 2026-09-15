@@ -8,6 +8,7 @@ import { IconSend } from '../icons'
 import { sendModeHint, useSession, useWorkbench } from '../store/workbench'
 import { JsonResponseViewer } from './JsonResponseViewer'
 import { ResponseHeaderList } from './ResponseHeaderList'
+import { usePins } from '../store/pins'
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'] as const
 
@@ -64,6 +65,7 @@ export function FreeRequestPane({ tabId }: Props) {
   const [historyTick, setHistoryTick] = useState(0)
   const [recent, setRecent] = useState<HistoryItem[]>([])
   const [detailsOpen, setDetailsOpen] = useState(false)
+  const openCreatePin = usePins((s) => s.openCreate)
 
   const method = tab?.method ?? 'GET'
   const url = tab?.url ?? ''
@@ -331,6 +333,13 @@ export function FreeRequestPane({ tabId }: Props) {
           <JsonResponseViewer
             value={result.body || ' '}
             onChange={(next) => setResult({ ...result, body: next })}
+            onPin={(payload) =>
+              openCreatePin({
+                value: payload.value,
+                alias: payload.alias,
+                sourceKey: payload.sourceKey,
+              })
+            }
           />
         </section>
       ) : (

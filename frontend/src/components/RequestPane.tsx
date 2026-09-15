@@ -33,6 +33,7 @@ import { ContractDiffPanel } from './ContractDiffPanel'
 import { EndpointHistory } from './EndpointHistory'
 import { EndpointParamsForm } from './EndpointParamsForm'
 import { JsonResponseViewer } from './JsonResponseViewer'
+import { matchPinToParams, usePins } from '../store/pins'
 import { ResponseHeaderList } from './ResponseHeaderList'
 
 type Props = {
@@ -133,6 +134,29 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
   useEffect(() => {
     setParamValues({})
   }, [endpoint.id])
+
+  const applyTicket = usePins((s) => s.applyTicket)
+  const consumeApply = usePins((s) => s.consumeApply)
+  const openCreatePin = usePins((s) => s.openCreate)
+
+  useEffect(() => {
+    if (!applyTicket) {
+      return
+    }
+    const applied = consumeApply()
+    if (!applied) {
+      return
+    }
+    const names = parameters.map((item) => item.name)
+    const match = matchPinToParams(applied.alias, names)
+    if (match) {
+      setParamValues((current) => ({ ...current, [match]: applied.value }))
+      return
+    }
+    if (names.length === 1) {
+      setParamValues((current) => ({ ...current, [names[0]]: applied.value }))
+    }
+  }, [applyTicket, consumeApply, parameters])
 
   useEffect(() => {
     setUrl(defaultUrl)
@@ -353,6 +377,7 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
       <EndpointParamsForm
         parameters={parameters}
         values={paramValues}
+        serviceId={service.id}
         onChange={(name, value) => setParamValues((current) => ({ ...current, [name]: value }))}
       />
 
@@ -574,6 +599,14 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
               await navigator.clipboard.writeText(result.body || '')
               message.success('Body copied')
             }}
+            onPin={(payload) =>
+              openCreatePin({
+                value: payload.value,
+                alias: payload.alias,
+                sourceKey: payload.sourceKey,
+                serviceId: service.id,
+              })
+            }
           />
         </section>
       ) : null}

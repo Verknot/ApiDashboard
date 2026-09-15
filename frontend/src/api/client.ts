@@ -14,6 +14,8 @@ import type {
   ProxySendPayload,
   ProxySendResult,
   AdminUser,
+  UserPin,
+  SavePinPayload,
 } from './types'
 
 export const api = axios.create({
@@ -216,6 +218,25 @@ export async function saveTemplate(endpointId: number, name: string, templateBod
 
 export async function deleteTemplate(id: number): Promise<void> {
   await api.delete(`/templates/${id}`)
+}
+
+export async function fetchPins(): Promise<UserPin[]> {
+  const { data } = await api.get<UserPin[]>('/pins')
+  return data
+}
+
+export async function savePin(payload: SavePinPayload): Promise<UserPin> {
+  const { data } = await api.post<UserPin>('/pins', payload)
+  return data
+}
+
+export async function updatePin(id: number, payload: SavePinPayload): Promise<UserPin> {
+  const { data } = await api.put<UserPin>(`/pins/${id}`, payload)
+  return data
+}
+
+export async function deletePin(id: number): Promise<void> {
+  await api.delete(`/pins/${id}`)
 }
 
 export async function proxySend(payload: ProxySendPayload): Promise<ProxySendResult> {

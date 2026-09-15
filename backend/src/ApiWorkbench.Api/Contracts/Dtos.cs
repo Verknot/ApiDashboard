@@ -127,6 +127,30 @@ public sealed record SaveTemplateRequest(int EndpointId, string Name, JsonElemen
 
 public sealed record TemplateResponse(int Id, int EndpointId, string Name, JsonElement TemplateBody, DateTimeOffset CreatedAt);
 
+public sealed record SavePinRequest(
+    string Alias,
+    string Value,
+    string? Comment = null,
+    string? SourceKey = null,
+    int? ServiceId = null);
+
+public sealed record UpdatePinRequest(
+    string Alias,
+    string Value,
+    string? Comment = null,
+    string? SourceKey = null,
+    int? ServiceId = null);
+
+public sealed record PinResponse(
+    int Id,
+    string Alias,
+    string Value,
+    string? Comment,
+    string? SourceKey,
+    int? ServiceId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
 public sealed record FetchTokenRequest(string Environment, string? RegionCode, string? Module = null);
 
 public sealed record FetchTokenResponse(string? AccessToken, string? RedirectUrl = null);

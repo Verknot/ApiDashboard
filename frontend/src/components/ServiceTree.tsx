@@ -123,7 +123,6 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
   const regionByServiceId = useWorkbench((s) => s.regionByServiceId)
   const favoriteIds = useFavorites((s) => s.favoriteIds)
   const toggleFavorite = useFavorites((s) => s.toggleFavorite)
-  const searching = query.trim().length > 0
 
   const filtered = useMemo(() => {
     const favoriteSet = new Set(favoriteIds)
@@ -261,13 +260,13 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
           {filtered.map(({ service, endpoints, favorite }, index) => {
             const active = service.id === selectedServiceId
             const region = regionByServiceId[service.id] ?? service.defaultRegion
-            const open = searching || !collapsedServices.includes(service.id)
+            const open = !collapsedServices.includes(service.id)
             const modules = groupByModule(endpoints, service.modules)
             const count = service.endpointCount ?? endpoints.length
             const renderTags = (tags: TaggedEndpoints[], moduleName: string, nested: boolean) =>
               tags.map((group) => {
                 const key = tagKey(service.id, moduleName, group.tag)
-                const tagOpen = searching || !collapsedTags.includes(key)
+                const tagOpen = !collapsedTags.includes(key)
                 const mKey = moduleName ? moduleKey(service.id, moduleName) : null
                 return (
                   <div key={key}>
@@ -351,7 +350,7 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
                     modules
                       ? modules.map((mod) => {
                           const mKey = moduleKey(service.id, mod.module)
-                          const moduleOpen = searching || !collapsedModules.includes(mKey)
+                          const moduleOpen = !collapsedModules.includes(mKey)
                           return (
                             <div key={mKey}>
                               <button type="button" className="tree-module" onClick={() => toggleModule(mKey)}>

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { IconCopy, IconSearch } from '../icons'
+import { IconCopy, IconMapPin, IconSearch } from '../icons'
 
 type Props = {
   value: string
   onChange: (value: string) => void
   onCopy?: () => void
+  onPin?: (payload: { value: string; alias?: string; sourceKey?: string }) => void
 }
 
 const MIN_HEIGHT = 160
@@ -42,7 +43,13 @@ function highlightJson(source: string, query: string): string {
   return colored.replace(re, (match) => `<mark class="json-mark">${match}</mark>`)
 }
 
-export function JsonResponseViewer({ value, onChange, onCopy }: Props) {
+function guessAliasFromSelection(draft: string, start: number): string | undefined {
+  const before = draft.slice(Math.max(0, start - 80), start)
+  const keyMatch = before.match(/"([^"\\]+)"\s*:\s*"?$/)
+  return keyMatch?.[1]
+}
+
+export function JsonResponseViewer({ value, onChange, onCopy, onPin }: Props) {
   const [query, setQuery] = useState('')
   const [height, setHeight] = useState(DEFAULT_HEIGHT)
   const areaRef = useRef<HTMLTextAreaElement>(null)
@@ -109,6 +116,29 @@ export function JsonResponseViewer({ value, onChange, onCopy }: Props) {
     syncScroll()
   }
 
+  const pinSelection = () => {
+    if (!onPin || !areaRef.current) {
+      return
+    }
+    const start = areaRef.current.selectionStart
+    const end = areaRef.current.selectionEnd
+    let selected = draft.slice(start, end).trim()
+    if (!selected) {
+      return
+    }
+    if (
+      (selected.startsWith('"') && selected.endsWith('"')) ||
+      (selected.startsWith("'") && selected.endsWith("'"))
+    ) {
+      selected = selected.slice(1, -1)
+    }
+    if (!selected) {
+      return
+    }
+    const sourceKey = guessAliasFromSelection(draft, start)
+    onPin({ value: selected, alias: sourceKey, sourceKey })
+  }
+
   return (
     <div className="json-response">
       <div className="json-response-toolbar">
@@ -125,6 +155,17 @@ export function JsonResponseViewer({ value, onChange, onCopy }: Props) {
             }}
           />
         </div>
+        {onPin ? (
+          <button
+            type="button"
+            className="btn btn-ghost btn-compact"
+            title="Select a value in the response, then pin it"
+            onClick={pinSelection}
+          >
+            <IconMapPin size={14} />
+            Pin
+          </button>
+        ) : null}
         {onCopy ? (
           <button type="button" className="btn btn-ghost btn-compact" onClick={onCopy} title="Copy response">
             <IconCopy size={14} />

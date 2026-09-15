@@ -185,6 +185,25 @@ export type RequestTemplate = {
   createdAt: string
 }
 
+export type UserPin = {
+  id: number
+  alias: string
+  value: string
+  comment: string | null
+  sourceKey: string | null
+  serviceId: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export type SavePinPayload = {
+  alias: string
+  value: string
+  comment?: string | null
+  sourceKey?: string | null
+  serviceId?: number | null
+}
+
 export type SaveHistoryPayload = {
   serviceId: number | null
   endpointId: number | null
