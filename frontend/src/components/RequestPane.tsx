@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   deleteTemplate,
   directSend,
-  downloadDto,
   fetchServiceToken,
   fetchTemplates,
   getApiMessage,
@@ -21,7 +20,6 @@ import {
   IconDeviceFloppy,
   IconEye,
   IconEyeOff,
-  IconFileCode,
   IconKey,
   IconRefresh,
   IconSend,
@@ -534,23 +532,10 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
           <IconCopy size={16} />
           Copy req
         </button>
-        {me?.canGenerateDto ? (
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={() =>
-              void downloadDto(endpoint.id).catch((error) => message.error(getApiMessage(error, 'DTO failed')))
-            }
-          >
-            <IconFileCode size={16} />
-            DTO
-          </button>
-        ) : null}
         <button
           type="button"
           className="btn btn-ghost"
-          disabled
-          title="Contract Diff временно отключён"
+          title="Contract diff"
           onClick={() => setShowDiff((value) => !value)}
         >
           Diff
