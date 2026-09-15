@@ -83,8 +83,11 @@ services:
             username: u1
             password: "123"
         urls:
-          dev: https://api.dev.{region}.company.com/backoffice
-          qa: https://api.qa.{region}.company.com/backoffice
+          dev: https://{region}.backoffice.dev
+          qa: https://{region}.backoffice.qa
+        global_urls:
+          dev: https://backoffice-dev
+          qa: https://backoffice-qa
         auth:
           type: certificate
           cert: client.pfx

@@ -26,6 +26,21 @@ export function environmentsOf(service: { urls: { environment: string }[] } | nu
   return fromUrls.length > 0 ? fromUrls : ['dev', 'stage', 'prod']
 }
 
+/** Regional service also has a host without geo (empty regionCode). */
+export function hasGlobalRegion(
+  service: { isRegional: boolean; urls: { regionCode?: string | null }[] } | null | undefined,
+): boolean {
+  if (!service?.isRegional) {
+    return false
+  }
+  return service.urls.some((item) => !(item.regionCode ?? '').trim())
+}
+
+export function regionLabel(code: string | null | undefined): string {
+  const value = (code ?? '').trim()
+  return value || 'global'
+}
+
 export type Me = {
   id: number
   email: string

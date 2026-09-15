@@ -59,9 +59,16 @@ export function FreeRequestPane({ tabId }: Props) {
   const me = useSession((s) => s.me)
   const tabs = useWorkbench((s) => s.tabs)
   const patchFreeTab = useWorkbench((s) => s.patchFreeTab)
+  const setTabResult = useWorkbench((s) => s.setTabResult)
   const tab = tabs.find((item) => item.id === tabId && item.kind === 'free')
   const [sending, setSending] = useState(false)
-  const [result, setResult] = useState<SendResult | null>(null)
+  const [result, setResultLocal] = useState<SendResult | null>(
+    () => useWorkbench.getState().tabs.find((item) => item.id === tabId)?.lastResult ?? null,
+  )
+  const commitResult = (next: SendResult | null) => {
+    setResultLocal(next)
+    setTabResult(tabId, next)
+  }
   const [historyTick, setHistoryTick] = useState(0)
   const [recent, setRecent] = useState<HistoryItem[]>([])
   const [detailsOpen, setDetailsOpen] = useState(false)
@@ -167,7 +174,7 @@ export function FreeRequestPane({ tabId }: Props) {
         pretty = relay.body
       }
       const responseHeaders = normalizeResponseHeaders(relay.headers)
-      setResult({
+      commitResult({
         status: relay.status,
         timeMs: relay.timeMs,
         body: pretty,
@@ -190,7 +197,7 @@ export function FreeRequestPane({ tabId }: Props) {
       }).then(() => setHistoryTick((tick) => tick + 1))
     } catch (error) {
       const text = getApiMessage(error, 'Send failed')
-      setResult({ status: null, timeMs: 0, body: text, error: text, headers: {} })
+      commitResult({ status: null, timeMs: 0, body: text, error: text, headers: {} })
     } finally {
       setSending(false)
     }
@@ -332,7 +339,7 @@ export function FreeRequestPane({ tabId }: Props) {
           ) : null}
           <JsonResponseViewer
             value={result.body || ' '}
-            onChange={(next) => setResult({ ...result, body: next })}
+            onChange={(next) => commitResult({ ...result, body: next })}
             onPin={(payload) =>
               openCreatePin({
                 value: payload.value,
@@ -372,7 +379,27 @@ export function FreeRequestPane({ tabId }: Props) {
                           ? prettyJson(item.requestHeaders)
                           : '{\n  "Accept": "application/json"\n}',
                       })
-                      setResult(null)
+                      let pretty = item.responseBody ?? ''
+                      try {
+                        pretty = JSON.stringify(JSON.parse(pretty), null, 2)
+                      } catch {
+                        pretty = item.responseBody ?? ''
+                      }
+                      commitResult({
+                        status: item.responseStatus,
+                        timeMs: item.responseTimeMs ?? 0,
+                        body: pretty,
+                        headers: normalizeResponseHeaders(
+                          item.responseHeaders
+                            ? Object.fromEntries(
+                                Object.entries(item.responseHeaders).map(([key, value]) => [
+                                  key,
+                                  value == null ? '' : String(value),
+                                ]),
+                              )
+                            : {},
+                        ),
+                      })
                     }}
                   >
                     <span className={`status-pill ${statusTone(item.responseStatus)}`}>

@@ -58,7 +58,7 @@ export function WorkbenchPage() {
       if (pendingReplay.environment?.trim()) {
         setEnvironment(pendingReplay.environment.trim().toLowerCase())
       }
-      if (pendingReplay.regionCode) {
+      if (pendingReplay.regionCode != null) {
         setRegion(pendingReplay.serviceId, pendingReplay.regionCode)
       }
       const tabId = `${pendingReplay.serviceId}:${pendingReplay.endpointId}`
@@ -103,7 +103,7 @@ export function WorkbenchPage() {
     activeTab?.kind === 'free'
       ? `Free · ${(activeTab.method || 'GET').toUpperCase()}`
       : selected
-        ? `${selected.name}${endpoint?.module ? ` · ${endpoint.module}` : ''}${selected.isRegional && region ? ` · ${region}` : ''} · ${environment}`
+        ? `${selected.name}${endpoint?.module ? ` · ${endpoint.module}` : ''}${selected.isRegional ? ` · ${(region ?? '') || 'global'}` : ''} · ${environment}`
         : 'Start'
 
   const patchEndpoint = (next: ServiceEndpoint) => {

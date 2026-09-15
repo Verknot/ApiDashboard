@@ -59,14 +59,19 @@ function HeaderBlock({
     return null
   }
   return (
-    <>
-      <p className="field-label">{label}</p>
-      <div className="response-headers" style={{ padding: '0 0 4px', border: 0 }}>
+    <details className="response-headers endpoint-history-headers">
+      <summary>
+        {label}
+        <span className="meta" style={{ marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
+          {rows.length}
+        </span>
+      </summary>
+      <div className="response-headers-body">
         {rows.map(([name, item]) => (
           <HeaderRow key={name} name={name} value={item} splunkUrl={splunkUrl} />
         ))}
       </div>
-    </>
+    </details>
   )
 }
 

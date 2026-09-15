@@ -12,6 +12,14 @@ export const useSession = create<SessionState>()((set) => ({
   setMe: (me) => set({ me }),
 }))
 
+export type TabSendResult = {
+  status: number | null
+  timeMs: number
+  body: string
+  error?: string
+  headers: Record<string, string>
+}
+
 export type WorkbenchTab = {
   id: string
   kind: 'endpoint' | 'free'
@@ -25,6 +33,8 @@ export type WorkbenchTab = {
   proxy: boolean
   clientCertPath: string
   clientCertPassword: string
+  paramValues: Record<string, string>
+  lastResult: TabSendResult | null
 }
 
 type WorkbenchState = {
@@ -53,6 +63,8 @@ type WorkbenchState = {
   setActiveTab: (id: string) => void
   setTabBody: (id: string, body: string) => void
   setTabToken: (id: string, token: string) => void
+  setTabResult: (id: string, result: TabSendResult | null) => void
+  setTabParamValues: (id: string, paramValues: Record<string, string>) => void
   patchFreeTab: (
     id: string,
     patch: Partial<
@@ -110,6 +122,27 @@ const DEFAULT_FREE_HEADERS = '{\n  "Accept": "application/json"\n}'
 
 function normalizeTab(raw: Partial<WorkbenchTab> & { id: string }): WorkbenchTab {
   const kind = raw.kind === 'free' || raw.id.startsWith('free:') ? 'free' : 'endpoint'
+  const lastResult =
+    raw.lastResult && typeof raw.lastResult === 'object'
+      ? {
+          status: raw.lastResult.status ?? null,
+          timeMs: Number(raw.lastResult.timeMs) || 0,
+          body: typeof raw.lastResult.body === 'string' ? raw.lastResult.body : '',
+          error: typeof raw.lastResult.error === 'string' ? raw.lastResult.error : undefined,
+          headers:
+            raw.lastResult.headers && typeof raw.lastResult.headers === 'object'
+              ? Object.fromEntries(
+                  Object.entries(raw.lastResult.headers).map(([key, value]) => [key, String(value ?? '')]),
+                )
+              : {},
+        }
+      : null
+  const paramValues =
+    raw.paramValues && typeof raw.paramValues === 'object' && !Array.isArray(raw.paramValues)
+      ? Object.fromEntries(
+          Object.entries(raw.paramValues).map(([key, value]) => [key, value == null ? '' : String(value)]),
+        )
+      : {}
   return {
     id: raw.id,
     kind,
@@ -123,6 +156,8 @@ function normalizeTab(raw: Partial<WorkbenchTab> & { id: string }): WorkbenchTab
     proxy: raw.proxy ?? true,
     clientCertPath: raw.clientCertPath ?? '',
     clientCertPassword: raw.clientCertPassword ?? '',
+    paramValues,
+    lastResult,
   }
 }
 
@@ -222,6 +257,14 @@ export const useWorkbench = create<WorkbenchState>()(
         set({
           tabs: get().tabs.map((tab) => (tab.id === id ? { ...tab, token } : tab)),
         }),
+      setTabResult: (id, result) =>
+        set({
+          tabs: get().tabs.map((tab) => (tab.id === id ? { ...tab, lastResult: result } : tab)),
+        }),
+      setTabParamValues: (id, paramValues) =>
+        set({
+          tabs: get().tabs.map((tab) => (tab.id === id ? { ...tab, paramValues } : tab)),
+        }),
       patchFreeTab: (id, patch) =>
         set({
           tabs: get().tabs.map((tab) => (tab.id === id && tab.kind === 'free' ? { ...tab, ...patch } : tab)),
@@ -237,15 +280,22 @@ export const useWorkbench = create<WorkbenchState>()(
           regionByServiceId: { ...get().regionByServiceId, [serviceId]: region },
         }),
       rememberDefaultRegion: (service) => {
-        if (!service.isRegional || get().regionByServiceId[service.id]) {
+        if (!service.isRegional) {
           return
         }
-        const fallback = service.defaultRegion ?? service.regions[0]?.code
-        if (fallback) {
-          set({
-            regionByServiceId: { ...get().regionByServiceId, [service.id]: fallback },
-          })
+        if (Object.prototype.hasOwnProperty.call(get().regionByServiceId, service.id)) {
+          return
         }
+        const hasGlobal = service.urls.some((item) => !(item.regionCode ?? '').trim())
+        const fallback =
+          service.defaultRegion != null
+            ? service.defaultRegion
+            : hasGlobal
+              ? ''
+              : (service.regions[0]?.code ?? '')
+        set({
+          regionByServiceId: { ...get().regionByServiceId, [service.id]: fallback },
+        })
       },
       setPendingReplay: (item) => set({ pendingReplay: item }),
     }),

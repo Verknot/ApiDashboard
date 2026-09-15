@@ -78,6 +78,8 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
   const environment = useWorkbench((s) => s.environment)
   const regionByServiceId = useWorkbench((s) => s.regionByServiceId)
   const setTabBody = useWorkbench((s) => s.setTabBody)
+  const setTabResult = useWorkbench((s) => s.setTabResult)
+  const setTabParamValues = useWorkbench((s) => s.setTabParamValues)
   const setServiceToken = useWorkbench((s) => s.setServiceToken)
   const tokenByScope = useWorkbench((s) => s.tokenByScope)
   const openTab = useWorkbench((s) => s.openTab)
@@ -94,7 +96,16 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
   const moduleAuth = resolveModuleAuth(service, endpoint.module)
   const baseUrl = resolveBaseUrl(service, environment, region, endpoint.module)
   const parameters = useEndpointParameters(endpoint.path, endpoint.parameters)
-  const [paramValues, setParamValues] = useState<Record<string, string>>({})
+  const [paramValues, setParamValuesLocal] = useState<Record<string, string>>(
+    () => useWorkbench.getState().tabs.find((item) => item.id === tabKey)?.paramValues ?? {},
+  )
+  const patchParamValue = (name: string, value: string) => {
+    setParamValuesLocal((current) => {
+      const next = { ...current, [name]: value }
+      setTabParamValues(tabKey, next)
+      return next
+    })
+  }
   const defaultUrl = useMemo(() => {
     if (!baseUrl) {
       return ''
@@ -106,7 +117,13 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
   const [tagDraft, setTagDraft] = useState('')
   const [templates, setTemplates] = useState<RequestTemplate[]>([])
   const [sending, setSending] = useState(false)
-  const [result, setResult] = useState<SendResult | null>(null)
+  const [result, setResultLocal] = useState<SendResult | null>(
+    () => useWorkbench.getState().tabs.find((item) => item.id === tabKey)?.lastResult ?? null,
+  )
+  const commitResult = (next: SendResult | null) => {
+    setResultLocal(next)
+    setTabResult(tabKey, next)
+  }
   const [showDiff, setShowDiff] = useState(false)
   const [historyTick, setHistoryTick] = useState(0)
   const [templateOpen, setTemplateOpen] = useState(false)
@@ -129,10 +146,6 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
     setUrl(defaultUrl)
   }, [defaultUrl])
 
-  useEffect(() => {
-    setParamValues({})
-  }, [endpoint.id])
-
   const applyTicket = usePins((s) => s.applyTicket)
   const consumeApply = usePins((s) => s.consumeApply)
   const openCreatePin = usePins((s) => s.openCreate)
@@ -148,18 +161,14 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
     const names = parameters.map((item) => item.name)
     const match = matchPinToParams(applied.alias, names)
     if (match) {
-      setParamValues((current) => ({ ...current, [match]: applied.value }))
+      patchParamValue(match, applied.value)
       return
     }
     if (names.length === 1) {
-      setParamValues((current) => ({ ...current, [names[0]]: applied.value }))
+      patchParamValue(names[0], applied.value)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once per ticket
   }, [applyTicket, consumeApply, parameters])
-
-  useEffect(() => {
-    setUrl(defaultUrl)
-    setResult(null)
-  }, [defaultUrl, endpoint.id, environment, region])
 
   useEffect(() => {
     const stored = useWorkbench.getState().tabs.find((item) => item.id === tabKey)?.body ?? ''
@@ -226,7 +235,7 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
           pretty = relay.body
         }
         const responseHeaders = normalizeResponseHeaders(relay.headers)
-        setResult({
+        commitResult({
           status: relay.status,
           timeMs: relay.timeMs,
           body: pretty,
@@ -249,7 +258,7 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
         }).then(() => setHistoryTick((tick) => tick + 1))
       } catch (error) {
         const text = getApiMessage(error, 'Send failed')
-        setResult({ status: null, timeMs: 0, body: text, error: text, headers: {} })
+        commitResult({ status: null, timeMs: 0, body: text, error: text, headers: {} })
       } finally {
         setSending(false)
       }
@@ -287,7 +296,7 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
     } catch {
       pretty = item.responseBody ?? ''
     }
-    setResult({
+    commitResult({
       status: item.responseStatus,
       timeMs: item.responseTimeMs ?? 0,
       body: pretty,
@@ -376,7 +385,7 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
         parameters={parameters}
         values={paramValues}
         serviceId={service.id}
-        onChange={(name, value) => setParamValues((current) => ({ ...current, [name]: value }))}
+        onChange={patchParamValue}
       />
 
       {moduleAuth.authType === 'token' ? (
@@ -579,7 +588,7 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
           ) : null}
           <JsonResponseViewer
             value={result.body || ' '}
-            onChange={(next) => setResult({ ...result, body: next })}
+            onChange={(next) => commitResult({ ...result, body: next })}
             onCopy={async () => {
               await navigator.clipboard.writeText(result.body || '')
               message.success('Body copied')

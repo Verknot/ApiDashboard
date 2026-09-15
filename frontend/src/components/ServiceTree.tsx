@@ -85,17 +85,28 @@ function matchesQuery(service: CatalogService, query: string): { serviceHit: boo
     (service.description ?? '').toLowerCase().includes(q) ||
     service.regions.some((region) => region.code.includes(q) || region.label.toLowerCase().includes(q))
 
-  const matchingEndpoints = endpoints.filter(
-    (endpoint) =>
-      endpoint.path.toLowerCase().includes(q) ||
-      endpoint.method.toLowerCase().includes(q) ||
-      (endpoint.module ?? '').toLowerCase().includes(q) ||
-      (endpoint.description ?? '').toLowerCase().includes(q) ||
-      (endpoint.operationId ?? '').toLowerCase().includes(q) ||
-      allEndpointTags(endpoint.tags, endpoint.userTags).some((tag) => tag.toLowerCase().includes(q)),
-  )
+  const matchingEndpoints = endpoints.filter((endpoint) => endpointMatchesQuery(endpoint, q))
 
   return { serviceHit, endpoints: serviceHit ? endpoints : matchingEndpoints }
+}
+
+function endpointMatchesQuery(endpoint: ServiceEndpoint, q: string): boolean {
+  return (
+    endpoint.path.toLowerCase().includes(q) ||
+    endpoint.method.toLowerCase().includes(q) ||
+    (endpoint.module ?? '').toLowerCase().includes(q) ||
+    (endpoint.description ?? '').toLowerCase().includes(q) ||
+    (endpoint.operationId ?? '').toLowerCase().includes(q) ||
+    allEndpointTags(endpoint.tags, endpoint.userTags).some((tag) => tag.toLowerCase().includes(q))
+  )
+}
+
+function filterEndpoints(endpoints: ServiceEndpoint[], query: string): ServiceEndpoint[] {
+  const q = query.trim().toLowerCase()
+  if (!q) {
+    return endpoints
+  }
+  return endpoints.filter((endpoint) => endpointMatchesQuery(endpoint, q))
 }
 
 function methodClass(method: string): string {
@@ -112,6 +123,7 @@ function moduleKey(serviceId: number, module: string): string {
 
 export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, refreshingSwagger }: Props) {
   const [query, setQuery] = useState('')
+  const [serviceQueries, setServiceQueries] = useState<Record<number, string>>({})
   const [collapsedServices, setCollapsedServices] = useState<number[]>([])
   const [collapsedTags, setCollapsedTags] = useState<string[]>([])
   const [collapsedModules, setCollapsedModules] = useState<string[]>([])
@@ -245,7 +257,7 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
         <IconSearch size={16} />
         <input
           value={query}
-          placeholder="Service, module, path, or tag"
+          placeholder="All services · module, path, tag"
           onChange={(event) => setQuery(event.target.value)}
         />
       </div>
@@ -259,10 +271,15 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
         <div className="service-list">
           {filtered.map(({ service, endpoints, favorite }, index) => {
             const active = service.id === selectedServiceId
-            const region = regionByServiceId[service.id] ?? service.defaultRegion
             const open = !collapsedServices.includes(service.id)
-            const modules = groupByModule(endpoints, service.modules)
+            const localQuery = serviceQueries[service.id] ?? ''
+            const scopedEndpoints = filterEndpoints(endpoints, localQuery)
+            const modules = groupByModule(scopedEndpoints, service.modules)
             const count = service.endpointCount ?? endpoints.length
+            const regionChip =
+              (regionByServiceId[service.id] !== undefined
+                ? regionByServiceId[service.id]
+                : service.defaultRegion) || 'global'
             const renderTags = (tags: TaggedEndpoints[], moduleName: string, nested: boolean) =>
               tags.map((group) => {
                 const key = tagKey(service.id, moduleName, group.tag)
@@ -331,7 +348,7 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
                       {count > 0 ? `${count} endpoints` : (service.description ?? service.authType)}
                     </span>
                   </span>
-                  {service.isRegional ? <span className="region-chip">{region ?? 'geo'}</span> : null}
+                  {service.isRegional ? <span className="region-chip">{regionChip}</span> : null}
                   <span
                     className={`star-btn${favorite ? ' on' : ''}`}
                     title={favorite ? 'Remove from favorites' : 'Add to favorites'}
@@ -344,27 +361,43 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
                   </span>
                 </button>
                 {open ? (
-                  endpoints.length === 0 ? (
-                    <p className="tree-empty">Refresh swagger in Admin first.</p>
-                  ) : (
-                    modules
-                      ? modules.map((mod) => {
-                          const mKey = moduleKey(service.id, mod.module)
-                          const moduleOpen = !collapsedModules.includes(mKey)
-                          return (
-                            <div key={mKey}>
-                              <button type="button" className="tree-module" onClick={() => toggleModule(mKey)}>
-                                <span className={`tree-chevron${moduleOpen ? ' open' : ''}`}>
-                                  <IconChevronRight size={12} />
-                                </span>
-                                {mod.module}
-                              </button>
-                              {moduleOpen ? renderTags(mod.tags, mod.module, true) : null}
-                            </div>
-                          )
-                        })
-                      : renderTags(groupByTag(endpoints), '', false)
-                  )
+                  <>
+                    {endpoints.length > 8 ? (
+                      <div className="search search-in-service">
+                        <IconSearch size={14} />
+                        <input
+                          value={localQuery}
+                          placeholder={`In ${service.name}…`}
+                          onChange={(event) =>
+                            setServiceQueries((current) => ({ ...current, [service.id]: event.target.value }))
+                          }
+                        />
+                      </div>
+                    ) : null}
+                    {scopedEndpoints.length === 0 ? (
+                      <p className="tree-empty">
+                        {localQuery.trim() ? 'Nothing matches in this service.' : 'Refresh swagger in Admin first.'}
+                      </p>
+                    ) : modules ? (
+                      modules.map((mod) => {
+                        const mKey = moduleKey(service.id, mod.module)
+                        const moduleOpen = !collapsedModules.includes(mKey)
+                        return (
+                          <div key={mKey}>
+                            <button type="button" className="tree-module" onClick={() => toggleModule(mKey)}>
+                              <span className={`tree-chevron${moduleOpen ? ' open' : ''}`}>
+                                <IconChevronRight size={12} />
+                              </span>
+                              {mod.module}
+                            </button>
+                            {moduleOpen ? renderTags(mod.tags, mod.module, true) : null}
+                          </div>
+                        )
+                      })
+                    ) : (
+                      renderTags(groupByTag(scopedEndpoints), '', false)
+                    )}
+                  </>
                 ) : null}
               </div>
             )

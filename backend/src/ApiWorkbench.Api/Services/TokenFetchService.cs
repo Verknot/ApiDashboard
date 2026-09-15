@@ -57,7 +57,9 @@ public sealed class TokenFetchService(
                     : $"У portal '{moduleName}' auth.type не token.");
         }
 
-        var region = service.IsRegional ? (regionCode ?? service.DefaultRegion ?? string.Empty).Trim().ToLowerInvariant() : string.Empty;
+        var region = service.IsRegional
+            ? NormalizeRegionCode(regionCode ?? service.DefaultRegion)
+            : string.Empty;
         var tokenUrl = PickTokenUrl(service, env, region, moduleName);
         if (tokenUrl is null || string.IsNullOrWhiteSpace(tokenUrl.Url))
         {
@@ -219,6 +221,12 @@ public sealed class TokenFetchService(
         }
 
         return null;
+    }
+
+    private static string NormalizeRegionCode(string? code)
+    {
+        var value = (code ?? string.Empty).Trim().ToLowerInvariant();
+        return value is "global" or "none" or "no" or "-" or "_" ? string.Empty : value;
     }
 
     private static string Truncate(string value) =>

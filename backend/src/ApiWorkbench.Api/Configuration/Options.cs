@@ -23,7 +23,13 @@ public sealed class PortalYaml
 {
     public string Name { get; set; } = string.Empty;
     public SwaggerDownloadYaml? Swagger { get; set; }
+
+    /// <summary>Per-env base URLs. With regions, use {region} (and optional global_urls for non-geo host).</summary>
     public Dictionary<string, string>? Urls { get; set; }
+
+    /// <summary>Optional non-regional bases alongside regional urls (empty regionCode).</summary>
+    public Dictionary<string, string>? GlobalUrls { get; set; }
+
     public AuthYaml? Auth { get; set; }
 }
 

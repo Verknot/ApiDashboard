@@ -243,7 +243,7 @@ public sealed class CatalogSyncService(
             }
 
             var urlsMap = portal.Urls ?? new Dictionary<string, string>();
-            if (urlsMap.Count == 0)
+            if (urlsMap.Count == 0 && (portal.GlobalUrls is null || portal.GlobalUrls.Count == 0))
             {
                 throw new InvalidOperationException($"У portal '{name}' укажите urls (хотя бы одну среду).");
             }
@@ -254,7 +254,16 @@ public sealed class CatalogSyncService(
                 normalizedUrls[ServiceEnvironments.Normalize(key)] = value;
             }
 
-            urls.AddRange(ResolvePortalUrls(regions, isRegional, normalizedUrls, name));
+            var normalizedGlobalUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            if (portal.GlobalUrls is not null)
+            {
+                foreach (var (key, value) in portal.GlobalUrls)
+                {
+                    normalizedGlobalUrls[ServiceEnvironments.Normalize(key)] = value;
+                }
+            }
+
+            urls.AddRange(ResolvePortalUrls(regions, isRegional, normalizedUrls, normalizedGlobalUrls, name));
 
             var auth = portal.Auth ?? new AuthYaml { Type = "none" };
             var apiAuthType = (auth.Type ?? "none").Trim().ToLowerInvariant();
@@ -267,7 +276,11 @@ public sealed class CatalogSyncService(
             var certBase64 = FirstNonEmpty(auth.CertBase64);
             var certVault = FirstNonEmpty(auth.CertVault);
             var certPassword = auth.CertPassword;
-            var moduleToken = ResolveTokenAuth(auth, regions, isRegional, apiAuthType, name, declaredEnvs);
+            var hasGlobal = normalizedGlobalUrls.Count > 0
+                            || normalizedUrls.Values.Any(v =>
+                                !string.IsNullOrWhiteSpace(v)
+                                && !v.Contains("{region}", StringComparison.OrdinalIgnoreCase));
+            var moduleToken = ResolveTokenAuth(auth, regions, isRegional, hasGlobal, apiAuthType, name, declaredEnvs);
             if (apiAuthType == "token" && moduleToken.Urls.Count == 0)
             {
                 throw new InvalidOperationException($"У portal '{name}' auth.type=token, но нет auth.token_url.");
@@ -309,7 +322,11 @@ public sealed class CatalogSyncService(
         var defaultRegion = entry.DefaultRegion?.Trim().ToLowerInvariant();
         if (isRegional)
         {
-            if (string.IsNullOrWhiteSpace(defaultRegion) || regions.All(r => r.Code != defaultRegion))
+            if (IsGlobalRegionAlias(defaultRegion))
+            {
+                defaultRegion = string.Empty;
+            }
+            else if (string.IsNullOrWhiteSpace(defaultRegion) || regions.All(r => r.Code != defaultRegion))
             {
                 defaultRegion = regions[0].Code;
             }
@@ -362,6 +379,14 @@ public sealed class CatalogSyncService(
                 }
             }
 
+            if (portal.GlobalUrls is not null)
+            {
+                foreach (var key in portal.GlobalUrls.Keys)
+                {
+                    keys.Add(ServiceEnvironments.Normalize(key));
+                }
+            }
+
             if (portal.Auth?.TokenUrl is { } tokenUrl)
             {
                 foreach (var key in tokenUrl.ByEnvironment.Keys)
@@ -383,18 +408,26 @@ public sealed class CatalogSyncService(
         IReadOnlyList<ResolvedRegion> regions,
         bool isRegional,
         Dictionary<string, string> urlsMap,
+        Dictionary<string, string> globalUrlsMap,
         string module)
     {
-        var envKeys = ServiceEnvironments.Order(urlsMap.Keys);
         var urls = new List<ResolvedUrl>();
+        var envKeys = ServiceEnvironments.Order(urlsMap.Keys.Concat(globalUrlsMap.Keys));
+
         if (!isRegional)
         {
             foreach (var env in envKeys)
             {
-                var url = LookupEnv(urlsMap, env);
+                var url = LookupEnv(urlsMap, env) ?? LookupEnv(globalUrlsMap, env);
                 if (string.IsNullOrWhiteSpace(url))
                 {
                     throw new InvalidOperationException($"У portal '{module}' нет URL для среды '{env}'.");
+                }
+
+                if (url.Contains("{region}", StringComparison.OrdinalIgnoreCase))
+                {
+                    throw new InvalidOperationException(
+                        $"У portal '{module}' URL среды '{env}' содержит {{region}}, но у сервиса нет regions.");
                 }
 
                 urls.Add(new ResolvedUrl(env, string.Empty, url.Trim(), module));
@@ -403,25 +436,51 @@ public sealed class CatalogSyncService(
             return urls;
         }
 
-        foreach (var region in regions)
+        foreach (var env in envKeys)
         {
-            foreach (var env in envKeys)
+            var template = LookupEnv(urlsMap, env);
+            var global = LookupEnv(globalUrlsMap, env);
+
+            if (!string.IsNullOrWhiteSpace(template)
+                && template.Contains("{region}", StringComparison.OrdinalIgnoreCase))
             {
-                var template = LookupEnv(urlsMap, env)
-                               ?? throw new InvalidOperationException($"У portal '{module}' нет URL для среды '{env}'.");
-                if (!template.Contains("{region}", StringComparison.OrdinalIgnoreCase))
+                foreach (var region in regions)
+                {
+                    var url = template.Replace("{region}", region.Code, StringComparison.OrdinalIgnoreCase).Trim();
+                    urls.Add(new ResolvedUrl(env, region.Code, url, module));
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(template))
+            {
+                // urls without {region} on a regional service → non-geo ("global") host
+                urls.Add(new ResolvedUrl(env, string.Empty, template.Trim(), module));
+            }
+
+            if (!string.IsNullOrWhiteSpace(global))
+            {
+                if (global.Contains("{region}", StringComparison.OrdinalIgnoreCase))
                 {
                     throw new InvalidOperationException(
-                        $"У portal '{module}' URL среды '{env}' для регионов должен содержать {{region}}.");
+                        $"У portal '{module}' global_urls среды '{env}' не должен содержать {{region}}.");
                 }
 
-                var url = template.Replace("{region}", region.Code, StringComparison.OrdinalIgnoreCase).Trim();
-                urls.Add(new ResolvedUrl(env, region.Code, url, module));
+                if (!urls.Any(u => u.Environment == env && u.RegionCode == string.Empty && u.Module == module))
+                {
+                    urls.Add(new ResolvedUrl(env, string.Empty, global.Trim(), module));
+                }
+            }
+
+            if (!urls.Any(u => u.Environment == env && u.Module == module))
+            {
+                throw new InvalidOperationException($"У portal '{module}' нет URL для среды '{env}'.");
             }
         }
 
         return urls;
     }
+
+    private static bool IsGlobalRegionAlias(string? code) =>
+        code is "global" or "none" or "no" or "-" or "_";
 
     private static string? LookupEnv(Dictionary<string, string>? environments, string env)
     {
@@ -442,6 +501,7 @@ public sealed class CatalogSyncService(
         AuthYaml? auth,
         IReadOnlyList<ResolvedRegion> regions,
         bool isRegional,
+        bool includeGlobalSlot,
         string authType,
         string module,
         IReadOnlyList<string> environments)
@@ -459,6 +519,7 @@ public sealed class CatalogSyncService(
         var urls = new List<ResolvedTokenUrl>();
         IEnumerable<(string Env, string Region)> slots = isRegional
             ? regions.SelectMany(region => envKeys.Select(env => (env, region.Code)))
+                .Concat(includeGlobalSlot ? envKeys.Select(env => (env, string.Empty)) : [])
             : envKeys.Select(env => (env, string.Empty));
 
         foreach (var (env, region) in slots)
@@ -484,6 +545,13 @@ public sealed class CatalogSyncService(
 
             if (string.IsNullOrWhiteSpace(raw))
             {
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(region)
+                && raw.Contains("{region}", StringComparison.OrdinalIgnoreCase))
+            {
+                // global host has no geo — skip geo-bound token templates
                 continue;
             }
 

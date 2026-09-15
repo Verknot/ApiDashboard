@@ -1,4 +1,4 @@
-import { environmentsOf, isProductionEnvironment, type CatalogService } from '../api/types'
+import { environmentsOf, hasGlobalRegion, isProductionEnvironment, regionLabel, type CatalogService } from '../api/types'
 import { resolveBaseUrl, useWorkbench } from '../store/workbench'
 import { useEffect, useMemo } from 'react'
 
@@ -13,10 +13,17 @@ export function EnvRegionBar({ service }: Props) {
   const setRegion = useWorkbench((s) => s.setRegion)
 
   const selectedEndpointId = useWorkbench((s) => s.selectedEndpointId)
-  const region = service ? regionByServiceId[service.id] ?? service.defaultRegion ?? service.regions[0]?.code : undefined
+  const storedRegion = service ? regionByServiceId[service.id] : undefined
+  const region =
+    service == null
+      ? undefined
+      : storedRegion !== undefined
+        ? storedRegion
+        : (service.defaultRegion ?? (hasGlobalRegion(service) ? '' : service.regions[0]?.code))
   const module = service?.endpoints.find((item) => item.id === selectedEndpointId)?.module
   const baseUrl = resolveBaseUrl(service, environment, region, module)
   const envOptions = useMemo(() => environmentsOf(service), [service])
+  const showGlobal = service ? hasGlobalRegion(service) : false
 
   useEffect(() => {
     if (envOptions.length === 0) {
@@ -44,6 +51,16 @@ export function EnvRegionBar({ service }: Props) {
         </div>
         {service?.isRegional ? (
           <div className="pills">
+            {showGlobal ? (
+              <button
+                type="button"
+                className={`pill${(region ?? '') === '' ? ' on' : ''}`}
+                title="Non-regional host"
+                onClick={() => setRegion(service.id, '')}
+              >
+                global
+              </button>
+            ) : null}
             {service.regions.map((item) => (
               <button
                 key={item.code}
@@ -66,6 +83,11 @@ export function EnvRegionBar({ service }: Props) {
       </div>
       <span className="url-chip" title={baseUrl ?? undefined}>
         {baseUrl ?? 'select a service'}
+        {service?.isRegional ? (
+          <span className="meta" style={{ marginLeft: 8 }}>
+            {regionLabel(region)}
+          </span>
+        ) : null}
       </span>
     </div>
   )

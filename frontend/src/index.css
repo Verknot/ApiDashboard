@@ -715,6 +715,19 @@ body.is-row-resizing {
   color: var(--mute);
 }
 
+.search-in-service {
+  margin: 4px 8px 8px 28px;
+  padding: 0 8px;
+  height: auto;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.search-in-service input {
+  height: 28px;
+  font-size: 12px;
+}
+
 .service-list {
   display: flex;
   flex-direction: column;
@@ -2189,13 +2202,29 @@ body.is-row-resizing .json-response-grip {
   margin-top: 12px;
 }
 
+.endpoint-history-detail .endpoint-history-headers {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.endpoint-history-detail .endpoint-history-headers > summary {
+  padding: 8px 10px;
+}
+
+.endpoint-history-detail .endpoint-history-headers-body,
+.endpoint-history-detail .response-headers-body {
+  max-height: 160px;
+}
+
 .endpoint-history-detail pre {
   margin: 0;
   padding: 10px 0 0;
   font-family: var(--mono);
   font-size: 12px;
   line-height: 1.5;
-  max-height: 220px;
+  max-height: 420px;
   overflow: auto;
   white-space: pre-wrap;
   color: var(--ink);
