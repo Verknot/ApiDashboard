@@ -642,6 +642,12 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("cert_vault_path");
 
+                    b.Property<bool>("Insecure")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("insecure");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .ValueGeneratedOnAdd()

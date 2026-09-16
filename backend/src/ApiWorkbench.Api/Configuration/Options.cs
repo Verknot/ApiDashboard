@@ -36,6 +36,13 @@ public sealed class PortalYaml
 public sealed class SwaggerDownloadYaml
 {
     public string? Url { get; set; }
+
+    /// <summary>
+    /// Skip TLS certificate validation for this portal (swagger pull, Send proxy, token fetch).
+    /// Use only for internal CA / UntrustedRoot in non-prod.
+    /// </summary>
+    public bool Insecure { get; set; }
+
     public SwaggerBasicYaml? Basic { get; set; }
 }
 

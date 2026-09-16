@@ -28,6 +28,7 @@ export function EndpointParamsForm({ parameters, values, onChange, serviceId }: 
         {parameters.map((param) => {
           const typeLabel = [param.type, param.format ? `$${param.format}` : null].filter(Boolean).join('')
           const current = values[param.name] ?? ''
+          const enums = param.enum?.filter((item) => item.length > 0) ?? []
           const matchingPins = pins.filter((pin) => {
             const alias = pin.alias.toLowerCase()
             const name = param.name.toLowerCase()
@@ -41,20 +42,38 @@ export function EndpointParamsForm({ parameters, values, onChange, serviceId }: 
                   {param.required ? <em>*</em> : null}
                 </span>
                 <span className="params-type">
-                  {typeLabel || 'string'}
+                  {typeLabel || (enums.length > 0 ? 'enum' : 'string')}
                   <span>({param.in})</span>
                 </span>
                 {param.description ? <span className="params-desc">{param.description}</span> : null}
               </div>
               <div className="params-value-row">
-                <input
-                  className="url-input"
-                  value={current}
-                  placeholder={param.name}
-                  list={matchingPins.length > 0 ? `pin-${param.name}` : undefined}
-                  onChange={(event) => onChange(param.name, event.target.value)}
-                />
-                {matchingPins.length > 0 ? (
+                {enums.length > 0 ? (
+                  <select
+                    className="url-input"
+                    value={current}
+                    onChange={(event) => onChange(param.name, event.target.value)}
+                  >
+                    <option value="">{param.required ? `Select ${param.name}…` : '(empty)'}</option>
+                    {enums.map((item) => (
+                      <option key={item} value={item}>
+                        {item}
+                      </option>
+                    ))}
+                    {current && !enums.includes(current) ? (
+                      <option value={current}>{current} (custom)</option>
+                    ) : null}
+                  </select>
+                ) : (
+                  <input
+                    className="url-input"
+                    value={current}
+                    placeholder={param.name}
+                    list={matchingPins.length > 0 ? `pin-${param.name}` : undefined}
+                    onChange={(event) => onChange(param.name, event.target.value)}
+                  />
+                )}
+                {enums.length === 0 && matchingPins.length > 0 ? (
                   <datalist id={`pin-${param.name}`}>
                     {matchingPins.map((pin) => (
                       <option key={pin.id} value={pin.value} label={`${pin.alias}${pin.comment ? ` — ${pin.comment}` : ''}`} />

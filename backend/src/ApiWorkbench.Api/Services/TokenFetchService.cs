@@ -81,7 +81,7 @@ public sealed class TokenFetchService(
                 "Token fetch needs a client certificate: auth.cert, cert_base64, or cert_vault.");
         }
 
-        var (client, dispose) = CreateClient(auth, service.Name);
+        var (client, dispose) = CreateClient(auth, service.Name, ModuleAllowsInsecure(service, moduleName));
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, target);
@@ -147,9 +147,37 @@ public sealed class TokenFetchService(
         return Match(string.Empty);
     }
 
-    private (HttpClient Client, bool Dispose) CreateClient(ServiceAuthContext auth, string serviceName)
+    private static bool ModuleAllowsInsecure(ServiceEntity service, string module)
+    {
+        if (service.SwaggerSources.Count == 0)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(module))
+        {
+            var source = service.SwaggerSources.FirstOrDefault(item =>
+                string.Equals(item.Name, module, StringComparison.OrdinalIgnoreCase));
+            if (source is not null)
+            {
+                return source.Insecure;
+            }
+        }
+
+        return service.SwaggerSources.Count == 1 && service.SwaggerSources.First().Insecure;
+    }
+
+    private (HttpClient Client, bool Dispose) CreateClient(
+        ServiceAuthContext auth,
+        string serviceName,
+        bool insecure)
     {
         var handler = ClientCertLocator.CreateHandler(auth, serviceName, configuration, hostEnvironment);
+        if (insecure)
+        {
+            ClientCertLocator.AllowInsecureServerCertificate(handler);
+        }
+
         return (new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) }, true);
     }
 

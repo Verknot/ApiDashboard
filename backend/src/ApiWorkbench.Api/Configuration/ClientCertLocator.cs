@@ -46,6 +46,23 @@ internal static class ClientCertLocator
         return handler;
     }
 
+    public static void AllowInsecureServerCertificate(HttpClientHandler handler)
+    {
+        handler.ServerCertificateCustomValidationCallback =
+            HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+    }
+
+    public static HttpClientHandler CreateInsecureRelayHandler()
+    {
+        var handler = new HttpClientHandler
+        {
+            AllowAutoRedirect = false,
+            UseCookies = false
+        };
+        AllowInsecureServerCertificate(handler);
+        return handler;
+    }
+
     public static X509Certificate2 LoadCertificate(
         ServiceEntity service,
         IConfiguration configuration,

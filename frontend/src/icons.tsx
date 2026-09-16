@@ -171,6 +171,24 @@ export const IconExternalLink = (p: IconProps) => (
     paths={['M12 6h-6a2 2 0 0 0 -2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-6', 'M11 13l9 -9', 'M15 4h5v5']}
   />
 )
+export const IconMaximize = (p: IconProps) => (
+  <TablerIcon
+    {...p}
+    paths={['M4 8v-2a2 2 0 0 1 2 -2h2', 'M4 16v2a2 2 0 0 0 2 2h2', 'M16 4h2a2 2 0 0 1 2 2v2', 'M16 20h2a2 2 0 0 0 2 -2v-2']}
+  />
+)
+export const IconMinimize = (p: IconProps) => (
+  <TablerIcon
+    {...p}
+    paths={['M15 19v-2a2 2 0 0 1 2 -2h2', 'M15 5v2a2 2 0 0 0 2 2h2', 'M5 15h2a2 2 0 0 1 2 2v2', 'M5 9h2a2 2 0 0 0 2 -2v-2']}
+  />
+)
+export const IconHelp = (p: IconProps) => (
+  <TablerIcon
+    {...p}
+    paths={['M12 12m-9 0a9 9 0 1 0 18 0a9 9 0 1 0 -18 0', 'M12 17l0 .01', 'M12 13.5a1.5 1.5 0 0 1 1 -1.5a2.6 2.6 0 1 0 -3 -4']}
+  />
+)
 export const IconCopy = (p: IconProps) => (
   <TablerIcon {...p} paths={['M7 7m0 2.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667z', 'M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1']} />
 )

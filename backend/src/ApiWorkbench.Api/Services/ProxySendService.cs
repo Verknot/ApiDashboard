@@ -102,11 +102,12 @@ public sealed class ProxySendService(
         var auth = service is null
             ? FreeRequestAuth(request)
             : ServiceAuthResolver.Resolve(service, module);
+        var insecure = ModuleAllowsInsecure(service, module);
         HttpClient client;
         bool disposeClient;
         try
         {
-            (client, disposeClient) = CreateClient(service, auth);
+            (client, disposeClient) = CreateClient(service, auth, insecure);
         }
         catch (InvalidOperationException ex)
         {
@@ -129,7 +130,7 @@ public sealed class ProxySendService(
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or AuthenticationException)
         {
             clock.Stop();
-            var detail = DescribeSendFailure(ex, service, auth);
+            var detail = DescribeSendFailure(ex, service, auth, insecure);
             return new ProxySendResponse(null, (int)clock.ElapsedMilliseconds, detail, detail, []);
         }
         finally
@@ -139,6 +140,26 @@ public sealed class ProxySendService(
                 client.Dispose();
             }
         }
+    }
+
+    private static bool ModuleAllowsInsecure(ServiceEntity? service, string? module)
+    {
+        if (service?.SwaggerSources is null || service.SwaggerSources.Count == 0)
+        {
+            return false;
+        }
+
+        if (!string.IsNullOrWhiteSpace(module))
+        {
+            var source = service.SwaggerSources.FirstOrDefault(item =>
+                string.Equals(item.Name, module, StringComparison.OrdinalIgnoreCase));
+            if (source is not null)
+            {
+                return source.Insecure;
+            }
+        }
+
+        return service.SwaggerSources.Count == 1 && service.SwaggerSources.First().Insecure;
     }
 
     private static ServiceAuthContext? FreeRequestAuth(ProxySendRequest request)
@@ -163,11 +184,33 @@ public sealed class ProxySendService(
             string.Empty);
     }
 
-    private (HttpClient Client, bool Dispose) CreateClient(ServiceEntity? service, ServiceAuthContext? auth)
+    private (HttpClient Client, bool Dispose) CreateClient(
+        ServiceEntity? service,
+        ServiceAuthContext? auth,
+        bool insecure)
     {
-        if (auth is null)
+        if (auth is null
+            || string.Equals(auth.AuthType, "none", StringComparison.OrdinalIgnoreCase)
+            || !auth.NeedsClientCertificate)
         {
-            return (httpClientFactory.CreateClient("relay"), false);
+            if (auth is not null
+                && string.Equals(auth.AuthType, "certificate", StringComparison.OrdinalIgnoreCase)
+                && !auth.HasClientCertificateMaterial)
+            {
+                var where = service is null ? "free request" : $"service '{service.Name}'";
+                throw new InvalidOperationException(
+                    $"{where}: needs a client certificate (cert path / base64 / vault).");
+            }
+
+            if (!insecure)
+            {
+                return (httpClientFactory.CreateClient("relay"), false);
+            }
+
+            return (new HttpClient(ClientCertLocator.CreateInsecureRelayHandler())
+            {
+                Timeout = TimeSpan.FromSeconds(60)
+            }, true);
         }
 
         if (string.Equals(auth.AuthType, "certificate", StringComparison.OrdinalIgnoreCase)
@@ -178,17 +221,21 @@ public sealed class ProxySendService(
                 $"{where}: needs a client certificate (cert path / base64 / vault).");
         }
 
-        if (!auth.NeedsClientCertificate)
-        {
-            return (httpClientFactory.CreateClient("relay"), false);
-        }
-
         var label = service?.Name ?? "free-request";
         var handler = ClientCertLocator.CreateHandler(auth, label, configuration, hostEnvironment);
+        if (insecure)
+        {
+            ClientCertLocator.AllowInsecureServerCertificate(handler);
+        }
+
         return (new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(60) }, true);
     }
 
-    private static string DescribeSendFailure(Exception ex, ServiceEntity? service, ServiceAuthContext? auth)
+    private static string DescribeSendFailure(
+        Exception ex,
+        ServiceEntity? service,
+        ServiceAuthContext? auth,
+        bool insecure)
     {
         var text = ex.ToString();
         if (text.Contains("certificate required", StringComparison.OrdinalIgnoreCase)
@@ -211,7 +258,16 @@ public sealed class ProxySendService(
                 : $"TLS: server requires a client certificate (mTLS) for {where}. Set auth.type: certificate (or token) and auth.cert: your.pfx in services.yaml, then Save / From disk.";
         }
 
-        return ex.GetBaseException().Message;
+        var root = ex.GetBaseException().Message;
+        if (!insecure
+            && (root.Contains("UntrustedRoot", StringComparison.OrdinalIgnoreCase)
+                || root.Contains("PartialChain", StringComparison.OrdinalIgnoreCase)
+                || root.Contains("remote certificate is invalid", StringComparison.OrdinalIgnoreCase)))
+        {
+            return $"{root} For internal CA set swagger.insecure: true on this portal in services.yaml, then resync catalog.";
+        }
+
+        return root;
     }
 
     private static bool HasBody(string method) => method is not ("GET" or "HEAD");

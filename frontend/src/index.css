@@ -232,7 +232,8 @@ textarea {
 
 .page-head-compact {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 10px;
   flex-wrap: wrap;
   margin: 0 0 10px;
@@ -242,6 +243,34 @@ textarea {
 .page-head-compact .page-kicker {
   margin: 0;
   flex-shrink: 0;
+}
+
+.persistence-help {
+  display: grid;
+  gap: 14px;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.persistence-help h3 {
+  margin: 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.persistence-help p,
+.persistence-help ul {
+  margin: 0;
+  color: var(--mute);
+}
+
+.persistence-help ul {
+  padding-left: 18px;
+}
+
+.persistence-help li {
+  margin: 2px 0;
 }
 
 .page-head-compact .page-title {
@@ -688,6 +717,54 @@ body.is-row-resizing {
   color: var(--mute);
   margin: 0 0 12px;
   padding: 0 6px;
+}
+
+.catalog-search-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 8px;
+  flex-wrap: wrap;
+}
+
+.catalog-search-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--line);
+  background: var(--canvas);
+  color: var(--mute);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 11px;
+  cursor: pointer;
+  max-width: 140px;
+}
+
+.catalog-search-tab.active {
+  color: var(--ink);
+  border-color: #7a8f6a;
+  background: rgba(122, 143, 106, 0.12);
+}
+
+.catalog-search-tab span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-search-tab-close {
+  display: inline-flex;
+  opacity: 0.7;
+}
+
+.catalog-search-tab-close:hover {
+  opacity: 1;
+  color: var(--ink);
+}
+
+.catalog-search-add {
+  padding-inline: 6px;
 }
 
 .search {
@@ -1777,6 +1854,32 @@ body.is-row-resizing {
   overflow: auto;
 }
 
+.response-headers:not([open]) > .response-headers-body {
+  display: none;
+}
+
+.swagger-response-schema {
+  margin: 12px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.swagger-schema-body {
+  max-height: 280px;
+}
+
+.swagger-schema-pre {
+  margin: 0;
+  padding: 0 0 4px;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink);
+}
+
 .response-header-row {
   display: grid;
   grid-template-columns: minmax(120px, 220px) minmax(0, 1fr) 22px;
@@ -1854,6 +1957,11 @@ body.is-row-resizing {
 .params-value-row .url-input {
   flex: 1;
   min-width: 0;
+}
+
+.params-value-row select.url-input {
+  height: 36px;
+  cursor: pointer;
 }
 
 .params-meta {
@@ -1993,6 +2101,104 @@ body.is-row-resizing {
   margin-left: -18px;
   border-radius: 99px;
   background: rgba(255, 255, 255, 0.18);
+}
+
+.json-mode-pills {
+  flex-shrink: 0;
+}
+
+.json-response-tree {
+  overflow: auto;
+  background: #121214;
+  padding: 10px 12px 14px;
+  min-height: 160px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #e8e8ec;
+}
+
+.json-tree-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  padding: 1px 0;
+}
+
+.json-tree-toggle:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.json-tree-chevron {
+  display: inline-block;
+  width: 12px;
+  transition: transform 0.12s var(--ease);
+  color: var(--mute);
+}
+
+.json-tree-chevron.open {
+  transform: rotate(90deg);
+}
+
+.json-tree-key {
+  color: #9ec8f0;
+}
+
+.json-tree-preview,
+.json-tree-close {
+  color: var(--mute);
+}
+
+.json-tree-leaf.json-tree-string {
+  color: #a8d48f;
+}
+
+.json-tree-leaf.json-tree-number {
+  color: #e0b35a;
+}
+
+.json-tree-leaf.json-tree-boolean,
+.json-tree-leaf.json-tree-object {
+  color: #c9a0dc;
+}
+
+.json-fullscreen {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(8, 8, 10, 0.72);
+  display: flex;
+  padding: 24px;
+  box-sizing: border-box;
+}
+
+.json-fullscreen-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.json-fullscreen-panel .json-response-editor,
+.json-fullscreen-panel .json-response-tree {
+  flex: 1;
+  min-height: 0;
+  height: auto !important;
+}
+
+body.json-fullscreen-open {
+  overflow: hidden;
 }
 
 body.is-row-resizing .json-response-grip {

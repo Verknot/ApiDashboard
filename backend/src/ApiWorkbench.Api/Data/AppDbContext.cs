@@ -135,6 +135,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.Property(x => x.BasicUsername).HasMaxLength(255);
             entity.Property(x => x.BasicPassword).HasMaxLength(500);
             entity.Property(x => x.VaultBase64).HasDefaultValue(false);
+            entity.Property(x => x.Insecure).HasDefaultValue(false);
             entity.Property(x => x.ApiAuthType).HasMaxLength(20);
             entity.Property(x => x.CertPath).HasMaxLength(500);
             entity.Property(x => x.CertBase64).HasColumnType("text");

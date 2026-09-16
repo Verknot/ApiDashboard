@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Security.Authentication;
 using System.Text;
@@ -274,7 +275,16 @@ public sealed class SwaggerIngestService(
             if (ClientCertLocator.NeedsClientCertificate(ServiceAuthResolver.Resolve(service, source.Name)))
             {
                 throw new InvalidOperationException(
-                    $"Swagger {service.Name}: TLS/сеть. Нужны HTTPS и PFX из C:\\pult-certs. {ex.Message}",
+                    $"Swagger {service.Name}: TLS/сеть. Нужны HTTPS и PFX из C:\\pult-certs" +
+                    (source.Insecure ? "." : ", или swagger.insecure: true для внутреннего CA.") +
+                    $" {ex.Message}",
+                    ex);
+            }
+
+            if (!source.Insecure)
+            {
+                throw new InvalidOperationException(
+                    $"Swagger {service.Name}: TLS. Поставьте CA в Trusted Root или swagger.insecure: true. {ex.Message}",
                     ex);
             }
 
@@ -292,13 +302,26 @@ public sealed class SwaggerIngestService(
     private (HttpClient Client, bool Dispose) CreateSwaggerClient(ServiceEntity service, ServiceSwaggerSource source)
     {
         var auth = ServiceAuthResolver.Resolve(service, source.Name);
-        if (!auth.NeedsClientCertificate)
+        if (auth.NeedsClientCertificate)
         {
-            return (httpClientFactory.CreateClient("swagger"), false);
+            var handler = ClientCertLocator.CreateHandler(auth, service.Name, configuration, hostEnvironment);
+            if (source.Insecure)
+            {
+                ClientCertLocator.AllowInsecureServerCertificate(handler);
+            }
+
+            return (new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) }, true);
         }
 
-        var handler = ClientCertLocator.CreateHandler(auth, service.Name, configuration, hostEnvironment);
-        return (new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(20) }, true);
+        if (source.Insecure)
+        {
+            return (new HttpClient(ClientCertLocator.CreateInsecureRelayHandler())
+            {
+                Timeout = TimeSpan.FromSeconds(20)
+            }, true);
+        }
+
+        return (httpClientFactory.CreateClient("swagger"), false);
     }
 
     private async Task<(string User, string Password)?> ResolveBasicAsync(ServiceSwaggerSource source, CancellationToken cancellationToken)
@@ -572,18 +595,62 @@ public sealed class SwaggerIngestService(
             return null;
         }
 
-        var rows = merged.Select(parameter => new Dictionary<string, object?>
+        var rows = merged.Select(parameter =>
         {
-            ["name"] = parameter.Name,
-            ["in"] = parameter.In?.ToString().ToLowerInvariant() ?? "query",
-            ["required"] = parameter.Required,
-            ["description"] = parameter.Description,
-            ["type"] = parameter.Schema?.Type,
-            ["format"] = parameter.Schema?.Format
+            var row = new Dictionary<string, object?>
+            {
+                ["name"] = parameter.Name,
+                ["in"] = parameter.In?.ToString().ToLowerInvariant() ?? "query",
+                ["required"] = parameter.Required,
+                ["description"] = parameter.Description,
+                ["type"] = parameter.Schema?.Type,
+                ["format"] = parameter.Schema?.Format
+            };
+            var enums = FormatEnumValues(parameter.Schema?.Enum);
+            if (enums is { Count: > 0 })
+            {
+                row["enum"] = enums;
+            }
+
+            return row;
         }).ToList();
 
         return JsonDocument.Parse(JsonSerializer.Serialize(rows));
     }
+
+    private static List<string>? FormatEnumValues(IList<Microsoft.OpenApi.Any.IOpenApiAny>? values)
+    {
+        if (values is null || values.Count == 0)
+        {
+            return null;
+        }
+
+        var list = new List<string>(values.Count);
+        foreach (var value in values)
+        {
+            var text = FormatOpenApiAny(value);
+            if (!string.IsNullOrWhiteSpace(text))
+            {
+                list.Add(text);
+            }
+        }
+
+        return list.Count == 0 ? null : list;
+    }
+
+    private static string? FormatOpenApiAny(Microsoft.OpenApi.Any.IOpenApiAny? value) =>
+        value switch
+        {
+            null => null,
+            Microsoft.OpenApi.Any.OpenApiString s => s.Value,
+            Microsoft.OpenApi.Any.OpenApiInteger i => i.Value.ToString(CultureInfo.InvariantCulture),
+            Microsoft.OpenApi.Any.OpenApiLong l => l.Value.ToString(CultureInfo.InvariantCulture),
+            Microsoft.OpenApi.Any.OpenApiFloat f => f.Value.ToString(CultureInfo.InvariantCulture),
+            Microsoft.OpenApi.Any.OpenApiDouble d => d.Value.ToString(CultureInfo.InvariantCulture),
+            Microsoft.OpenApi.Any.OpenApiBoolean b => b.Value ? "true" : "false",
+            Microsoft.OpenApi.Any.OpenApiNull => "null",
+            _ => value.ToString()
+        };
 
     /// <summary>
     /// Prefer original JSON body for stable contract diffs; convert OpenAPI YAML to JSON.

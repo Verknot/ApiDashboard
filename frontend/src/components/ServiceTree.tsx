@@ -1,7 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { allEndpointTags } from '../api/schema'
 import type { CatalogService, ServiceEndpoint } from '../api/types'
-import { IconChevronRight, IconCloudOff, IconPlus, IconRefresh, IconSearch, IconStar } from '../icons'
+import { IconChevronRight, IconCloudOff, IconPlus, IconRefresh, IconSearch, IconStar, IconX } from '../icons'
 import { useFavorites, useWorkbench } from '../store/workbench'
 
 type Props = {
@@ -20,6 +20,51 @@ type TaggedEndpoints = {
 type ModuleGroup = {
   module: string
   tags: TaggedEndpoints[]
+}
+
+type SearchTab = {
+  id: string
+  label: string
+  query: string
+}
+
+const SEARCH_TABS_KEY = 'api-workbench-catalog-search-tabs'
+
+function newSearchTab(index: number, query = ''): SearchTab {
+  return {
+    id: `search-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    label: `Search ${index}`,
+    query,
+  }
+}
+
+function loadSearchTabs(): { tabs: SearchTab[]; activeId: string } {
+  try {
+    const raw = sessionStorage.getItem(SEARCH_TABS_KEY)
+    if (!raw) {
+      const tab = newSearchTab(1)
+      return { tabs: [tab], activeId: tab.id }
+    }
+    const parsed = JSON.parse(raw) as { tabs?: SearchTab[]; activeId?: string }
+    const tabs = Array.isArray(parsed.tabs)
+      ? parsed.tabs
+          .filter((item) => item && typeof item.id === 'string')
+          .map((item, index) => ({
+            id: item.id,
+            label: typeof item.label === 'string' && item.label.trim() ? item.label : `Search ${index + 1}`,
+            query: typeof item.query === 'string' ? item.query : '',
+          }))
+      : []
+    if (tabs.length === 0) {
+      const tab = newSearchTab(1)
+      return { tabs: [tab], activeId: tab.id }
+    }
+    const activeId = tabs.some((item) => item.id === parsed.activeId) ? (parsed.activeId as string) : tabs[0].id
+    return { tabs, activeId }
+  } catch {
+    const tab = newSearchTab(1)
+    return { tabs: [tab], activeId: tab.id }
+  }
 }
 
 function endpointsOf(service: CatalogService): ServiceEndpoint[] {
@@ -122,7 +167,9 @@ function moduleKey(serviceId: number, module: string): string {
 }
 
 export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, refreshingSwagger }: Props) {
-  const [query, setQuery] = useState('')
+  const initialSearch = useMemo(() => loadSearchTabs(), [])
+  const [searchTabs, setSearchTabs] = useState<SearchTab[]>(initialSearch.tabs)
+  const [activeSearchTabId, setActiveSearchTabId] = useState(initialSearch.activeId)
   const [serviceQueries, setServiceQueries] = useState<Record<number, string>>({})
   const [collapsedServices, setCollapsedServices] = useState<number[]>([])
   const [collapsedTags, setCollapsedTags] = useState<string[]>([])
@@ -135,6 +182,12 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
   const regionByServiceId = useWorkbench((s) => s.regionByServiceId)
   const favoriteIds = useFavorites((s) => s.favoriteIds)
   const toggleFavorite = useFavorites((s) => s.toggleFavorite)
+
+  const query = searchTabs.find((tab) => tab.id === activeSearchTabId)?.query ?? ''
+
+  useEffect(() => {
+    sessionStorage.setItem(SEARCH_TABS_KEY, JSON.stringify({ tabs: searchTabs, activeId: activeSearchTabId }))
+  }, [searchTabs, activeSearchTabId])
 
   const filtered = useMemo(() => {
     const favoriteSet = new Set(favoriteIds)
@@ -151,6 +204,32 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
         return a.service.name.localeCompare(b.service.name, 'ru')
       })
   }, [favoriteIds, query, services])
+
+  const setActiveQuery = (next: string) => {
+    setSearchTabs((tabs) =>
+      tabs.map((tab) => (tab.id === activeSearchTabId ? { ...tab, query: next } : tab)),
+    )
+  }
+
+  const addSearchTab = () => {
+    const tab = newSearchTab(searchTabs.length + 1)
+    setSearchTabs((tabs) => [...tabs, tab])
+    setActiveSearchTabId(tab.id)
+  }
+
+  const closeSearchTab = (id: string) => {
+    if (searchTabs.length <= 1) {
+      return
+    }
+    const index = searchTabs.findIndex((tab) => tab.id === id)
+    const next = searchTabs.filter((tab) => tab.id !== id)
+    const relabeled = next.map((tab, i) => ({ ...tab, label: `Search ${i + 1}` }))
+    setSearchTabs(relabeled)
+    if (activeSearchTabId === id) {
+      const fallback = relabeled[Math.max(0, index - 1)] ?? relabeled[0]
+      setActiveSearchTabId(fallback.id)
+    }
+  }
 
   const toggleService = (id: number) => {
     setCollapsedServices((current) =>
@@ -253,12 +332,47 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
           </button>
         </div>
       </div>
+      <div className="catalog-search-tabs">
+        {searchTabs.map((tab) => (
+          <button
+            key={tab.id}
+            type="button"
+            className={`catalog-search-tab${tab.id === activeSearchTabId ? ' active' : ''}`}
+            onClick={() => setActiveSearchTabId(tab.id)}
+            title={tab.query.trim() || tab.label}
+          >
+            <span>{tab.label}</span>
+            {searchTabs.length > 1 ? (
+              <span
+                className="catalog-search-tab-close"
+                role="button"
+                tabIndex={-1}
+                title="Close search tab"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  closeSearchTab(tab.id)
+                }}
+              >
+                <IconX size={12} />
+              </span>
+            ) : null}
+          </button>
+        ))}
+        <button
+          type="button"
+          className="btn btn-ghost btn-compact catalog-search-add"
+          title="New search tab"
+          onClick={addSearchTab}
+        >
+          <IconPlus size={14} />
+        </button>
+      </div>
       <div className="search">
         <IconSearch size={16} />
         <input
           value={query}
           placeholder="All services · module, path, tag"
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => setActiveQuery(event.target.value)}
         />
       </div>
       {filtered.length === 0 ? (

@@ -54,12 +54,17 @@ function HeaderBlock({
   value: Record<string, unknown> | null | undefined
   splunkUrl?: string | null
 }) {
+  const [open, setOpen] = useState(false)
   const rows = headerEntries(value)
   if (rows.length === 0) {
     return null
   }
   return (
-    <details className="response-headers endpoint-history-headers">
+    <details
+      className="response-headers endpoint-history-headers"
+      open={open}
+      onToggle={(event) => setOpen(event.currentTarget.open)}
+    >
       <summary>
         {label}
         <span className="meta" style={{ marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
@@ -134,14 +139,24 @@ export function EndpointHistory({ endpointId, reloadToken, splunkUrl, onReplay }
               </div>
               {open ? (
                 <div className="endpoint-history-detail">
-                  <HeaderBlock label="Request headers" value={item.requestHeaders} splunkUrl={splunkUrl} />
+                  <HeaderBlock
+                    key={`${item.id}-req-headers`}
+                    label="Request headers"
+                    value={item.requestHeaders}
+                    splunkUrl={splunkUrl}
+                  />
                   {item.requestBody != null ? (
                     <>
                       <p className="field-label">Request</p>
                       <pre>{prettyJson(item.requestBody)}</pre>
                     </>
                   ) : null}
-                  <HeaderBlock label="Response headers" value={item.responseHeaders} splunkUrl={splunkUrl} />
+                  <HeaderBlock
+                    key={`${item.id}-res-headers`}
+                    label="Response headers"
+                    value={item.responseHeaders}
+                    splunkUrl={splunkUrl}
+                  />
                   <p className="field-label">Response</p>
                   <pre>{item.responseBody || ' '}</pre>
                 </div>

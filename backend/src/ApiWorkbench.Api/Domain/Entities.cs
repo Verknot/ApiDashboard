@@ -149,6 +149,9 @@ public sealed class ServiceSwaggerSource
     public string? BasicUsername { get; set; }
     public string? BasicPassword { get; set; }
 
+    /// <summary>Skip TLS cert validation for swagger download, Send (proxy), and token fetch for this module.</summary>
+    public bool Insecure { get; set; }
+
     /// <summary>API Send auth override for this module: token | certificate | none. Empty = inherit service.</summary>
     public string? ApiAuthType { get; set; }
     public string? CertPath { get; set; }

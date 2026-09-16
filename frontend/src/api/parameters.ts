@@ -31,6 +31,9 @@ export function mergeEndpointParameters(
       type: item.type ?? null,
       format: item.format ?? null,
       description: item.description ?? null,
+      enum: Array.isArray(item.enum)
+        ? item.enum.map((value) => String(value)).filter((value) => value.length > 0)
+        : null,
     })
   }
 

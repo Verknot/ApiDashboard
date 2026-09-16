@@ -12,6 +12,7 @@ services:
       - name: UserPortal
         swagger:
           url: https://api.dev.company.com/userportal/swagger.yml
+          # insecure: true  # internal CA: also applies to Send (proxy) + token fetch
           basic:
             username: swagger-reader
             password: REPLACE

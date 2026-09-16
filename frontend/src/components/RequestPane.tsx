@@ -12,7 +12,7 @@ import {
   saveUserTags,
 } from '../api/client'
 import { applyParametersToUrl, useEndpointParameters } from '../api/parameters'
-import { isBlankRequestBody, prettyJson, seedRequestBody } from '../api/schema'
+import { exampleFromSchema, isBlankRequestBody, prettyJson, seedRequestBody } from '../api/schema'
 import type { CatalogService, HistoryItem, RequestTemplate, ServiceEndpoint } from '../api/types'
 import { isProductionEnvironment, normalizeResponseHeaders } from '../api/types'
 import {
@@ -125,6 +125,7 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
     setTabResult(tabKey, next)
   }
   const [showDiff, setShowDiff] = useState(false)
+  const [showResponseExample, setShowResponseExample] = useState(false)
   const [historyTick, setHistoryTick] = useState(0)
   const [templateOpen, setTemplateOpen] = useState(false)
   const [templateName, setTemplateName] = useState('')
@@ -321,6 +322,25 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
 
   const bodyMatchesSpec = body.trim() === generatedBody.trim()
 
+  const responseSchemaText = useMemo(() => {
+    const schema = endpoint.responseSchema
+    if (!schema || Object.keys(schema).length === 0) {
+      return null
+    }
+    return prettyJson(schema)
+  }, [endpoint.responseSchema])
+
+  const responseExampleText = useMemo(() => {
+    if (!responseSchemaText || !endpoint.responseSchema) {
+      return null
+    }
+    try {
+      return prettyJson(exampleFromSchema(endpoint.responseSchema))
+    } catch {
+      return null
+    }
+  }, [endpoint.responseSchema, responseSchemaText])
+
   return (
     <>
       <div className="endpoint-title">
@@ -502,6 +522,32 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
           />
           {jsonError ? <p className="json-error">{jsonError}</p> : null}
         </>
+      ) : null}
+
+      {responseSchemaText ? (
+        <details className="response-headers swagger-response-schema">
+          <summary>
+            Response (swagger)
+            <span className="meta" style={{ marginLeft: 8, textTransform: 'none', letterSpacing: 0 }}>
+              schema
+            </span>
+          </summary>
+          <div className="response-headers-body swagger-schema-body">
+            <div className="body-actions" style={{ marginBottom: 8 }}>
+              <button
+                type="button"
+                className={`btn btn-ghost btn-compact${showResponseExample ? ' on' : ''}`}
+                disabled={!responseExampleText}
+                onClick={() => setShowResponseExample((value) => !value)}
+              >
+                {showResponseExample ? 'Schema' : 'Example'}
+              </button>
+            </div>
+            <pre className="swagger-schema-pre">
+              {showResponseExample && responseExampleText ? responseExampleText : responseSchemaText}
+            </pre>
+          </div>
+        </details>
       ) : null}
 
       <div className="send-row">

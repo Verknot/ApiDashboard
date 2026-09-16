@@ -5,6 +5,7 @@ import { prettyJson } from '../api/schema'
 import type { CatalogService, ServiceEndpoint } from '../api/types'
 import { EnvRegionBar } from '../components/EnvRegionBar'
 import { FreeRequestPane } from '../components/FreeRequestPane'
+import { PersistenceHelp } from '../components/PersistenceHelp'
 import { PinDialog } from '../components/PinDialog'
 import { PinsPanel } from '../components/PinsPanel'
 import { RequestPane } from '../components/RequestPane'
@@ -141,8 +142,11 @@ export function WorkbenchPage() {
   return (
     <>
       <div className="page-head page-head-compact">
-        <p className="page-kicker">Request</p>
-        <h1 className="page-title">{tabTitle}</h1>
+        <div>
+          <p className="page-kicker">Request</p>
+          <h1 className="page-title">{tabTitle}</h1>
+        </div>
+        <PersistenceHelp />
       </div>
       {tabs.length > 0 ? (
         <div className="tabs">

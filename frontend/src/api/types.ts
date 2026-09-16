@@ -75,6 +75,7 @@ export type EndpointParameter = {
   type?: string | null
   format?: string | null
   description?: string | null
+  enum?: string[] | null
 }
 
 export type ServiceEndpoint = {
