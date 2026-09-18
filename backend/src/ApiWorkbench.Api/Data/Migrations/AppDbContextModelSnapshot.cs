@@ -267,6 +267,10 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasColumnType("jsonb")
                         .HasColumnName("template_body");
 
+                    b.Property<JsonDocument>("ParamValues")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("param_values");
+
                     b.Property<int>("UserId")
                         .HasColumnType("integer")
                         .HasColumnName("user_id");
@@ -868,6 +872,56 @@ namespace ApiWorkbench.Api.Data.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("ApiWorkbench.Api.Domain.UserFavoriteRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<int>("EndpointId")
+                        .HasColumnType("integer")
+                        .HasColumnName("endpoint_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<JsonDocument>("ParamValues")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("param_values");
+
+                    b.Property<JsonDocument>("RequestBody")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("request_body");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_favorite_requests");
+
+                    b.HasIndex("EndpointId")
+                        .HasDatabaseName("ix_user_favorite_requests_endpoint_id");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_user_favorite_requests_user_created");
+
+                    b.ToTable("user_favorite_requests", (string)null);
+                });
+
             modelBuilder.Entity("ApiWorkbench.Api.Domain.UserPin", b =>
                 {
                     b.Property<int>("Id")
@@ -1148,6 +1202,27 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasConstraintName("fk_service_urls_services_service_id");
 
                     b.Navigation("Service");
+                });
+
+            modelBuilder.Entity("ApiWorkbench.Api.Domain.UserFavoriteRequest", b =>
+                {
+                    b.HasOne("ApiWorkbench.Api.Domain.EndpointEntity", "Endpoint")
+                        .WithMany()
+                        .HasForeignKey("EndpointId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_favorite_requests_endpoints_endpoint_id");
+
+                    b.HasOne("ApiWorkbench.Api.Domain.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_favorite_requests_users_user_id");
+
+                    b.Navigation("Endpoint");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ApiWorkbench.Api.Domain.UserPin", b =>

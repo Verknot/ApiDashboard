@@ -1556,10 +1556,10 @@ body.is-row-resizing {
   padding: 8px 8px 8px 10px;
   font-size: 12px;
   cursor: pointer;
-  width: 220px;
-  min-width: 220px;
-  max-width: 220px;
-  min-height: 52px;
+  width: 240px;
+  min-width: 240px;
+  max-width: 240px;
+  min-height: 72px;
   box-sizing: border-box;
   text-align: left;
 }
@@ -1569,7 +1569,24 @@ body.is-row-resizing {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
+}
+
+.tab-service {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tab-module {
+  font-size: 10px;
+  color: var(--mute);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .tab-method {
@@ -1578,6 +1595,7 @@ body.is-row-resizing {
   font-weight: 700;
   letter-spacing: 0.04em;
   color: var(--mute);
+  margin-top: 2px;
 }
 
 .tab-path {
@@ -1878,6 +1896,47 @@ body.is-row-resizing {
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--ink);
+}
+
+.body-enum-fields {
+  margin: 8px 0 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  border-bottom: 1px solid var(--line);
+}
+
+.body-enum-list {
+  display: grid;
+  gap: 8px;
+  max-height: 240px;
+}
+
+.body-enum-row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(140px, 1.2fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.body-enum-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.body-enum-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.body-enum-type {
+  font-size: 11px;
+  color: var(--mute);
 }
 
 .response-header-row {

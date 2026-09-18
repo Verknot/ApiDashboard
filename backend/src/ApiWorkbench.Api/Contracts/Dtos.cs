@@ -123,9 +123,38 @@ public sealed record HistoryItemResponse(
     DateTimeOffset CreatedAt,
     JsonElement? ResponseHeaders);
 
-public sealed record SaveTemplateRequest(int EndpointId, string Name, JsonElement TemplateBody);
+public sealed record SaveTemplateRequest(
+    int EndpointId,
+    string Name,
+    JsonElement TemplateBody,
+    JsonElement? ParamValues = null);
 
-public sealed record TemplateResponse(int Id, int EndpointId, string Name, JsonElement TemplateBody, DateTimeOffset CreatedAt);
+public sealed record TemplateResponse(
+    int Id,
+    int EndpointId,
+    string Name,
+    JsonElement TemplateBody,
+    JsonElement? ParamValues,
+    DateTimeOffset CreatedAt);
+
+public sealed record SaveFavoriteRequest(
+    int EndpointId,
+    string Name,
+    JsonElement? ParamValues = null,
+    JsonElement? RequestBody = null);
+
+public sealed record FavoriteRequestResponse(
+    int Id,
+    int EndpointId,
+    int ServiceId,
+    string ServiceName,
+    string Method,
+    string Path,
+    string Module,
+    string Name,
+    JsonElement? ParamValues,
+    JsonElement? RequestBody,
+    DateTimeOffset CreatedAt);
 
 public sealed record SavePinRequest(
     string Alias,

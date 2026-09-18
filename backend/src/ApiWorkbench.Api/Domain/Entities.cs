@@ -223,6 +223,21 @@ public sealed class RequestTemplate
     public int EndpointId { get; set; }
     public string Name { get; set; } = string.Empty;
     public JsonDocument TemplateBody { get; set; } = null!;
+    public JsonDocument? ParamValues { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public User User { get; set; } = null!;
+    public EndpointEntity Endpoint { get; set; } = null!;
+}
+
+public sealed class UserFavoriteRequest
+{
+    public int Id { get; set; }
+    public int UserId { get; set; }
+    public int EndpointId { get; set; }
+    public string Name { get; set; } = string.Empty;
+    public JsonDocument? ParamValues { get; set; }
+    public JsonDocument? RequestBody { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
 
     public User User { get; set; } = null!;

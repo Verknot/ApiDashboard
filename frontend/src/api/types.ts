@@ -198,7 +198,29 @@ export type RequestTemplate = {
   endpointId: number
   name: string
   templateBody: unknown
+  paramValues?: Record<string, string> | null
   createdAt: string
+}
+
+export type FavoriteRequest = {
+  id: number
+  endpointId: number
+  serviceId: number
+  serviceName: string
+  method: string
+  path: string
+  module: string
+  name: string
+  paramValues?: Record<string, string> | null
+  requestBody?: unknown | null
+  createdAt: string
+}
+
+export type SaveFavoritePayload = {
+  endpointId: number
+  name: string
+  paramValues?: Record<string, string> | null
+  requestBody?: unknown | null
 }
 
 export type UserPin = {

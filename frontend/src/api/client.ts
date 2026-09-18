@@ -3,10 +3,12 @@ import type {
   CatalogService,
   ConfigFile,
   ContractDiff,
+  FavoriteRequest,
   HistoryItem,
   Me,
   ReloadConfigResponse,
   RequestTemplate,
+  SaveFavoritePayload,
   SaveHistoryPayload,
   ServiceEndpoint,
   SnapshotItem,
@@ -208,16 +210,59 @@ export async function fetchHistory(params?: {
 
 export async function fetchTemplates(endpointId: number): Promise<RequestTemplate[]> {
   const { data } = await api.get<RequestTemplate[]>('/templates', { params: { endpointId } })
-  return data
+  return data.map((item) => ({
+    ...item,
+    paramValues: normalizeStringMap(item.paramValues),
+  }))
 }
 
-export async function saveTemplate(endpointId: number, name: string, templateBody: unknown): Promise<RequestTemplate> {
-  const { data } = await api.post<RequestTemplate>('/templates', { endpointId, name, templateBody })
+export async function saveTemplate(
+  endpointId: number,
+  name: string,
+  templateBody: unknown,
+  paramValues?: Record<string, string> | null,
+): Promise<RequestTemplate> {
+  const { data } = await api.post<RequestTemplate>('/templates', {
+    endpointId,
+    name,
+    templateBody,
+    paramValues: paramValues && Object.keys(paramValues).length > 0 ? paramValues : null,
+  })
   return data
 }
 
 export async function deleteTemplate(id: number): Promise<void> {
   await api.delete(`/templates/${id}`)
+}
+
+export async function fetchFavoriteRequests(): Promise<FavoriteRequest[]> {
+  const { data } = await api.get<FavoriteRequest[]>('/favorites')
+  return data.map((item) => ({
+    ...item,
+    paramValues: normalizeStringMap(item.paramValues),
+  }))
+}
+
+export async function saveFavoriteRequest(payload: SaveFavoritePayload): Promise<FavoriteRequest> {
+  const { data } = await api.post<FavoriteRequest>('/favorites', {
+    ...payload,
+    paramValues: payload.paramValues && Object.keys(payload.paramValues).length > 0 ? payload.paramValues : null,
+  })
+  return {
+    ...data,
+    paramValues: normalizeStringMap(data.paramValues),
+  }
+}
+
+export async function deleteFavoriteRequest(id: number): Promise<void> {
+  await api.delete(`/favorites/${id}`)
+}
+
+function normalizeStringMap(value: unknown): Record<string, string> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, item == null ? '' : String(item)]))
 }
 
 export async function fetchPins(): Promise<UserPin[]> {

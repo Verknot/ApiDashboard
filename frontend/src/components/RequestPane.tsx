@@ -7,6 +7,7 @@ import {
   fetchTemplates,
   getApiMessage,
   proxySend,
+  saveFavoriteRequest,
   saveHistory,
   saveTemplate,
   saveUserTags,
@@ -23,13 +24,16 @@ import {
   IconKey,
   IconRefresh,
   IconSend,
+  IconStar,
   IconTag,
   IconTrash,
 } from '../icons'
 import { resolveBaseUrl, resolveModuleAuth, sendModeHint, tokenScopeKey, useSession, useWorkbench } from '../store/workbench'
+import { BodyEnumFields } from './BodyEnumFields'
 import { ContractDiffPanel } from './ContractDiffPanel'
 import { EndpointHistory } from './EndpointHistory'
 import { EndpointParamsForm } from './EndpointParamsForm'
+import { notifyFavoritesChanged } from './FavoritesPanel'
 import { JsonResponseViewer } from './JsonResponseViewer'
 import { matchPinToParams, usePins } from '../store/pins'
 import { ResponseHeaderList } from './ResponseHeaderList'
@@ -128,7 +132,9 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
   const [showResponseExample, setShowResponseExample] = useState(false)
   const [historyTick, setHistoryTick] = useState(0)
   const [templateOpen, setTemplateOpen] = useState(false)
+  const [favoriteOpen, setFavoriteOpen] = useState(false)
   const [templateName, setTemplateName] = useState('')
+  const [favoriteName, setFavoriteName] = useState('')
   const [fetchingToken, setFetchingToken] = useState(false)
   const [showToken, setShowToken] = useState(false)
 
@@ -142,6 +148,11 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
   useEffect(() => {
     openTab(service.id, endpoint.id)
   }, [endpoint.id, openTab, service.id])
+
+  useEffect(() => {
+    const tab = useWorkbench.getState().tabs.find((item) => item.id === tabKey)
+    setParamValuesLocal(tab?.paramValues ?? {})
+  }, [tabKey])
 
   useEffect(() => {
     setUrl(defaultUrl)
@@ -284,6 +295,38 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
     setTabBody(tabKey, next)
   }
 
+  useEffect(() => {
+    const onApply = (event: Event) => {
+      const detail = (event as CustomEvent).detail as
+        | { tabId?: string; paramValues?: Record<string, string>; body?: unknown }
+        | undefined
+      if (!detail || detail.tabId !== tabKey) {
+        return
+      }
+      if (detail.paramValues) {
+        setParamValuesLocal(detail.paramValues)
+        setTabParamValues(tabKey, detail.paramValues)
+      }
+      if (detail.body != null && hasBody(endpoint.method)) {
+        const next = prettyJson(detail.body)
+        setDraftBody(next)
+        setTabBody(tabKey, next)
+      }
+    }
+    window.addEventListener('favorite:apply', onApply)
+    return () => window.removeEventListener('favorite:apply', onApply)
+  }, [endpoint.method, setTabBody, setTabParamValues, tabKey])
+
+  const applyTemplate = (item: RequestTemplate) => {
+    if (hasBody(endpoint.method)) {
+      applyBody(prettyJson(item.templateBody))
+    }
+    if (item.paramValues) {
+      setParamValuesLocal(item.paramValues)
+      setTabParamValues(tabKey, item.paramValues)
+    }
+  }
+
   const replayHistory = (item: HistoryItem) => {
     if (item.url) {
       setUrl(item.url)
@@ -390,6 +433,19 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
 
       <div className="req-url-row">
         <input className="url-input" value={url} onChange={(event) => setUrl(event.target.value)} aria-label="URL" />
+        <button
+          type="button"
+          className="btn btn-ghost btn-compact"
+          title="Copy URL"
+          disabled={!url.trim()}
+          onClick={async () => {
+            await navigator.clipboard.writeText(url.trim())
+            message.success('URL copied')
+          }}
+        >
+          <IconCopy size={14} />
+          URL
+        </button>
         <div className="pills">
           <button type="button" className={`pill${sendViaProxy ? ' on' : ''}`} onClick={() => setSendViaProxy(true)}>
             proxy
@@ -465,31 +521,35 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
         </>
       ) : null}
 
-      {hasBody(endpoint.method) ? (
-        <>
-          <div className="editor-split">
-            <label className="field-label">Body</label>
-            <div className="body-actions">
-              {templates.map((item) => (
-                <div key={item.id} className="tpl-chip">
-                  <button
-                    type="button"
-                    className="tpl-chip-use"
-                    title="Apply template"
-                    onClick={() => applyBody(prettyJson(item.templateBody))}
-                  >
-                    {item.name}
-                  </button>
-                  <button
-                    type="button"
-                    className="tpl-chip-del"
-                    title="Delete template"
-                    onClick={() => removeTemplate(item)}
-                  >
-                    <IconTrash size={12} />
-                  </button>
-                </div>
-              ))}
+      {parameters.length > 0 || hasBody(endpoint.method) ? (
+        <div className="editor-split" style={{ marginTop: parameters.length > 0 ? 12 : undefined }}>
+          <label className="field-label">{hasBody(endpoint.method) ? 'Body' : 'Templates'}</label>
+          <div className="body-actions">
+            {templates.map((item) => (
+              <div key={item.id} className="tpl-chip">
+                <button
+                  type="button"
+                  className="tpl-chip-use"
+                  title={
+                    item.paramValues && Object.keys(item.paramValues).length > 0
+                      ? `Apply body + params (${Object.keys(item.paramValues).join(', ')})`
+                      : 'Apply template'
+                  }
+                  onClick={() => applyTemplate(item)}
+                >
+                  {item.name}
+                </button>
+                <button
+                  type="button"
+                  className="tpl-chip-del"
+                  title="Delete template"
+                  onClick={() => removeTemplate(item)}
+                >
+                  <IconTrash size={12} />
+                </button>
+              </div>
+            ))}
+            {hasBody(endpoint.method) ? (
               <button
                 type="button"
                 className="btn btn-ghost btn-compact"
@@ -500,19 +560,24 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
                 <IconRefresh size={14} />
                 Reset
               </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-compact"
-                onClick={() => {
-                  setTemplateName(endpoint.operationId || `Template ${templates.length + 1}`)
-                  setTemplateOpen(true)
-                }}
-              >
-                <IconDeviceFloppy size={14} />
-                Save
-              </button>
-            </div>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-ghost btn-compact"
+              onClick={() => {
+                setTemplateName(endpoint.operationId || `Template ${templates.length + 1}`)
+                setTemplateOpen(true)
+              }}
+            >
+              <IconDeviceFloppy size={14} />
+              Save
+            </button>
           </div>
+        </div>
+      ) : null}
+
+      {hasBody(endpoint.method) ? (
+        <>
           <Input.TextArea
             className="json-body"
             value={body}
@@ -520,6 +585,7 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
             autoSize={{ minRows: 8, maxRows: 18 }}
             spellCheck={false}
           />
+          <BodyEnumFields schema={endpoint.requestSchema} body={body} onChange={applyBody} />
           {jsonError ? <p className="json-error">{jsonError}</p> : null}
         </>
       ) : null}
@@ -594,6 +660,18 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
           onClick={() => setShowDiff((value) => !value)}
         >
           Diff
+        </button>
+        <button
+          type="button"
+          className="btn btn-ghost"
+          title="Save to favorites"
+          onClick={() => {
+            setFavoriteName(endpoint.operationId || `${endpoint.method} ${endpoint.path}`)
+            setFavoriteOpen(true)
+          }}
+        >
+          <IconStar size={16} />
+          Favorite
         </button>
       </div>
 
@@ -678,24 +756,28 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
             return Promise.reject()
           }
           let payload: unknown = {}
-          try {
-            payload = JSON.parse(body.trim() || seedRequestBody(endpoint) || '{}')
-          } catch {
-            message.error('Body must be valid JSON')
-            return Promise.reject()
+          if (hasBody(endpoint.method)) {
+            try {
+              payload = JSON.parse(body.trim() || seedRequestBody(endpoint) || '{}')
+            } catch {
+              message.error('Body must be valid JSON')
+              return Promise.reject()
+            }
           }
           try {
-            const created = await saveTemplate(endpoint.id, name, payload)
+            const created = await saveTemplate(endpoint.id, name, payload, paramValues)
             setTemplates((current) => [created, ...current])
             setTemplateOpen(false)
-            message.success('Saved')
+            message.success('Saved (body + params)')
           } catch (error) {
             message.error(getApiMessage(error, 'Could not save template'))
             return Promise.reject()
           }
         }}
       >
-        <p className="hint-line">Name appears as a chip above the editor. Use × on the chip to delete.</p>
+        <p className="hint-line">
+          Saves request body and current path/query parameter values. Appears as a chip above the editor.
+        </p>
         <Input
           value={templateName}
           autoFocus
@@ -705,6 +787,52 @@ export function RequestPane({ service, endpoint, onEndpointPatch }: Props) {
             const ok = document.querySelector('.ant-modal-footer .ant-btn-primary') as HTMLButtonElement | null
             ok?.click()
           }}
+        />
+      </Modal>
+
+      <Modal
+        title="Save favorite request"
+        open={favoriteOpen}
+        okText="Save"
+        cancelText="Cancel"
+        onCancel={() => setFavoriteOpen(false)}
+        onOk={async () => {
+          const name = favoriteName.trim()
+          if (!name) {
+            message.error('Enter a name')
+            return Promise.reject()
+          }
+          let requestBody: unknown = null
+          if (hasBody(endpoint.method)) {
+            try {
+              requestBody = JSON.parse(body.trim() || '{}')
+            } catch {
+              message.error('Body must be valid JSON')
+              return Promise.reject()
+            }
+          }
+          try {
+            await saveFavoriteRequest({
+              endpointId: endpoint.id,
+              name,
+              paramValues,
+              requestBody,
+            })
+            notifyFavoritesChanged()
+            setFavoriteOpen(false)
+            message.success('Added to favorites')
+          } catch (error) {
+            message.error(getApiMessage(error, 'Could not save favorite'))
+            return Promise.reject()
+          }
+        }}
+      >
+        <p className="hint-line">Opens from the Favorites panel with params and body restored.</p>
+        <Input
+          value={favoriteName}
+          autoFocus
+          placeholder="e.g. recreate VM skip maintenance"
+          onChange={(event) => setFavoriteName(event.target.value)}
         />
       </Modal>
     </>

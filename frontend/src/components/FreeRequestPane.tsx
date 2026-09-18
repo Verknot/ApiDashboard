@@ -4,7 +4,7 @@ import { directSend, fetchHistory, getApiMessage, proxySend, saveHistory } from 
 import { prettyJson } from '../api/schema'
 import type { HistoryItem } from '../api/types'
 import { normalizeResponseHeaders } from '../api/types'
-import { IconSend } from '../icons'
+import { IconCopy, IconSend } from '../icons'
 import { sendModeHint, useSession, useWorkbench } from '../store/workbench'
 import { JsonResponseViewer } from './JsonResponseViewer'
 import { ResponseHeaderList } from './ResponseHeaderList'
@@ -242,17 +242,32 @@ export function FreeRequestPane({ tabId }: Props) {
           </button>
         </div>
 
-        <input
-          className="url-input free-url"
-          value={url}
-          placeholder="https://api.example.com/path"
-          onChange={(event) => apply({ url: event.target.value })}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-              void send()
-            }
-          }}
-        />
+        <div className="req-url-row">
+          <input
+            className="url-input free-url"
+            value={url}
+            placeholder="https://api.example.com/path"
+            onChange={(event) => apply({ url: event.target.value })}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+                void send()
+              }
+            }}
+          />
+          <button
+            type="button"
+            className="btn btn-ghost btn-compact"
+            title="Copy URL"
+            disabled={!url.trim()}
+            onClick={async () => {
+              await navigator.clipboard.writeText(url.trim())
+              message.success('URL copied')
+            }}
+          >
+            <IconCopy size={14} />
+            URL
+          </button>
+        </div>
         <p className="hint-line send-hint free-hint">{sendModeHint(sendViaProxy, undefined, url)}</p>
 
         <details

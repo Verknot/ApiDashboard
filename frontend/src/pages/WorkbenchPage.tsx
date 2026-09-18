@@ -4,6 +4,7 @@ import { fetchServices, getApiMessage, refreshSwagger } from '../api/client'
 import { prettyJson } from '../api/schema'
 import type { CatalogService, ServiceEndpoint } from '../api/types'
 import { EnvRegionBar } from '../components/EnvRegionBar'
+import { FavoritesPanel } from '../components/FavoritesPanel'
 import { FreeRequestPane } from '../components/FreeRequestPane'
 import { PersistenceHelp } from '../components/PersistenceHelp'
 import { PinDialog } from '../components/PinDialog'
@@ -153,14 +154,14 @@ export function WorkbenchPage() {
           {tabs.map((tab) => {
             const svc = services.find((item) => item.id === tab.serviceId)
             const ep = svc?.endpoints.find((item) => item.id === tab.endpointId)
-            const label =
-              tab.kind === 'free'
-                ? `${(tab.method || 'GET').toUpperCase()} free`
-                : ep
-                  ? `${ep.method} ${ep.path}`
-                  : (svc?.name ?? 'tab')
             const method = tab.kind === 'free' ? (tab.method || 'GET').toUpperCase() : (ep?.method ?? '')
             const pathLabel = tab.kind === 'free' ? 'free' : (ep?.path ?? (svc?.name ?? 'tab'))
+            const serviceLabel = tab.kind === 'free' ? 'Free request' : (svc?.name ?? 'Service')
+            const moduleLabel = tab.kind === 'free' ? '' : (ep?.module ?? '').trim()
+            const label =
+              tab.kind === 'free'
+                ? `${method} free`
+                : [serviceLabel, moduleLabel, method, pathLabel].filter(Boolean).join(' · ')
             return (
               <button
                 key={tab.id}
@@ -171,6 +172,8 @@ export function WorkbenchPage() {
               >
                 <span className="tab-color" style={{ background: tab.kind === 'free' ? '#8a9bb5' : (svc?.color ?? '#7a8f6a') }} />
                 <span className="tab-text">
+                  <span className="tab-service">{serviceLabel}</span>
+                  {moduleLabel ? <span className="tab-module">{moduleLabel}</span> : null}
                   {method ? <span className="tab-method">{method}</span> : null}
                   <span className="tab-path">{pathLabel}</span>
                 </span>
@@ -200,6 +203,7 @@ export function WorkbenchPage() {
         left={
           <div className="catalog-stack">
             <PinsPanel />
+            <FavoritesPanel />
             <ServiceTree
               services={services}
               loading={loading}

@@ -389,7 +389,8 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
             const localQuery = serviceQueries[service.id] ?? ''
             const scopedEndpoints = filterEndpoints(endpoints, localQuery)
             const modules = groupByModule(scopedEndpoints, service.modules)
-            const count = service.endpointCount ?? endpoints.length
+            const count = service.endpointCount ?? endpointsOf(service).length
+            const showInServiceSearch = count > 8 || Boolean(localQuery.trim())
             const regionChip =
               (regionByServiceId[service.id] !== undefined
                 ? regionByServiceId[service.id]
@@ -476,7 +477,7 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
                 </button>
                 {open ? (
                   <>
-                    {endpoints.length > 8 ? (
+                    {showInServiceSearch ? (
                       <div className="search search-in-service">
                         <IconSearch size={14} />
                         <input

@@ -40,7 +40,8 @@ export function PersistenceHelp() {
             <h3>Longer-lived</h3>
             <ul>
               <li>Pins — server (shared across sessions)</li>
-              <li>Favorites — this browser (localStorage)</li>
+              <li>Favorites (requests) — server</li>
+              <li>Favorites (services) — this browser (localStorage)</li>
               <li>Request history — server</li>
               <li>Catalog / services.yaml — server</li>
             </ul>

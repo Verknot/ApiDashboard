@@ -18,6 +18,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<ContractSnapshot> ContractSnapshots => Set<ContractSnapshot>();
     public DbSet<RequestHistory> RequestHistory => Set<RequestHistory>();
     public DbSet<RequestTemplate> RequestTemplates => Set<RequestTemplate>();
+    public DbSet<UserFavoriteRequest> UserFavoriteRequests => Set<UserFavoriteRequest>();
     public DbSet<UserPin> UserPins => Set<UserPin>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -273,7 +274,28 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             entity.HasKey(x => x.Id);
             entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
             entity.Property(x => x.TemplateBody).HasColumnType("jsonb").IsRequired();
+            entity.Property(x => x.ParamValues).HasColumnType("jsonb");
             entity.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+            entity.HasOne(x => x.User)
+                .WithMany()
+                .HasForeignKey(x => x.UserId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne(x => x.Endpoint)
+                .WithMany()
+                .HasForeignKey(x => x.EndpointId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<UserFavoriteRequest>(entity =>
+        {
+            entity.ToTable("user_favorite_requests");
+            entity.HasKey(x => x.Id);
+            entity.Property(x => x.Name).HasMaxLength(100).IsRequired();
+            entity.Property(x => x.ParamValues).HasColumnType("jsonb");
+            entity.Property(x => x.RequestBody).HasColumnType("jsonb");
+            entity.Property(x => x.CreatedAt).HasDefaultValueSql("NOW()");
+            entity.HasIndex(x => new { x.UserId, x.CreatedAt }).IsDescending(false, true)
+                .HasDatabaseName("ix_user_favorite_requests_user_created");
             entity.HasOne(x => x.User)
                 .WithMany()
                 .HasForeignKey(x => x.UserId)

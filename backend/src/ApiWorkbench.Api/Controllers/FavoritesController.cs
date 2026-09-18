@@ -12,13 +12,11 @@ namespace ApiWorkbench.Api.Controllers;
 
 [ApiController]
 [Authorize]
-[Route("api/templates")]
-public sealed class TemplatesController(AppDbContext db, IPermissionService permissions) : ControllerBase
+[Route("api/favorites")]
+public sealed class FavoritesController(AppDbContext db, IPermissionService permissions) : ControllerBase
 {
     [HttpGet]
-    public async Task<ActionResult<IReadOnlyList<TemplateResponse>>> List(
-        [FromQuery] int endpointId,
-        CancellationToken cancellationToken)
+    public async Task<ActionResult<IReadOnlyList<FavoriteRequestResponse>>> List(CancellationToken cancellationToken)
     {
         var userId = User.GetUserId();
         if (userId is null)
@@ -26,18 +24,24 @@ public sealed class TemplatesController(AppDbContext db, IPermissionService perm
             return Unauthorized();
         }
 
-        var rows = await db.RequestTemplates
+        var access = await permissions.GetAccessAsync(userId.Value, cancellationToken);
+        var rows = await db.UserFavoriteRequests
             .AsNoTracking()
-            .Where(t => t.UserId == userId && t.EndpointId == endpointId)
-            .OrderByDescending(t => t.CreatedAt)
+            .Include(f => f.Endpoint)
+            .ThenInclude(e => e.Service)
+            .Where(f => f.UserId == userId)
+            .OrderByDescending(f => f.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        return Ok(rows.Select(Map).ToList());
+        return Ok(rows
+            .Where(f => access.CanSeeService(f.Endpoint.ServiceId))
+            .Select(Map)
+            .ToList());
     }
 
     [HttpPost]
-    public async Task<ActionResult<TemplateResponse>> Save(
-        [FromBody] SaveTemplateRequest request,
+    public async Task<ActionResult<FavoriteRequestResponse>> Save(
+        [FromBody] SaveFavoriteRequest request,
         CancellationToken cancellationToken)
     {
         var userId = User.GetUserId();
@@ -49,10 +53,13 @@ public sealed class TemplatesController(AppDbContext db, IPermissionService perm
         var name = request.Name.Trim();
         if (name.Length is 0 or > 100)
         {
-            return BadRequest(new { message = "Имя шаблона 1–100 символов." });
+            return BadRequest(new { message = "Имя 1–100 символов." });
         }
 
-        var endpoint = await db.Endpoints.AsNoTracking().FirstOrDefaultAsync(e => e.Id == request.EndpointId, cancellationToken);
+        var endpoint = await db.Endpoints
+            .AsNoTracking()
+            .Include(e => e.Service)
+            .FirstOrDefaultAsync(e => e.Id == request.EndpointId, cancellationToken);
         if (endpoint is null)
         {
             return NotFound(new { message = "Эндпоинт не найден." });
@@ -64,16 +71,17 @@ public sealed class TemplatesController(AppDbContext db, IPermissionService perm
             return NotFound();
         }
 
-        var entity = new RequestTemplate
+        var entity = new UserFavoriteRequest
         {
             UserId = userId.Value,
             EndpointId = request.EndpointId,
             Name = name,
-            TemplateBody = JsonDocument.Parse(request.TemplateBody.GetRawText()),
             ParamValues = ParseOptionalObject(request.ParamValues),
-            CreatedAt = DateTimeOffset.UtcNow
+            RequestBody = ParseOptionalObject(request.RequestBody),
+            CreatedAt = DateTimeOffset.UtcNow,
+            Endpoint = endpoint
         };
-        db.RequestTemplates.Add(entity);
+        db.UserFavoriteRequests.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
         return Ok(Map(entity));
     }
@@ -87,19 +95,30 @@ public sealed class TemplatesController(AppDbContext db, IPermissionService perm
             return Unauthorized();
         }
 
-        var row = await db.RequestTemplates.FirstOrDefaultAsync(t => t.Id == id && t.UserId == userId, cancellationToken);
+        var row = await db.UserFavoriteRequests.FirstOrDefaultAsync(f => f.Id == id && f.UserId == userId, cancellationToken);
         if (row is null)
         {
             return NotFound();
         }
 
-        db.RequestTemplates.Remove(row);
+        db.UserFavoriteRequests.Remove(row);
         await db.SaveChangesAsync(cancellationToken);
         return NoContent();
     }
 
-    private static TemplateResponse Map(RequestTemplate t) =>
-        new(t.Id, t.EndpointId, t.Name, t.TemplateBody.RootElement.Clone(), JsonDocs.ToElement(t.ParamValues), t.CreatedAt);
+    private static FavoriteRequestResponse Map(UserFavoriteRequest f) =>
+        new(
+            f.Id,
+            f.EndpointId,
+            f.Endpoint.ServiceId,
+            f.Endpoint.Service?.Name ?? string.Empty,
+            f.Endpoint.Method,
+            f.Endpoint.Path,
+            f.Endpoint.Module ?? string.Empty,
+            f.Name,
+            JsonDocs.ToElement(f.ParamValues),
+            JsonDocs.ToElement(f.RequestBody),
+            f.CreatedAt);
 
     private static JsonDocument? ParseOptionalObject(JsonElement? element)
     {
