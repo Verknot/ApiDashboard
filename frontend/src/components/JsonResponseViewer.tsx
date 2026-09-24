@@ -218,6 +218,7 @@ export function JsonResponseViewer({ value, onChange, onCopy, onPin }: Props) {
   const [mode, setMode] = useState<'tree' | 'text'>('text')
   const areaRef = useRef<HTMLTextAreaElement>(null)
   const editorRef = useRef<HTMLDivElement>(null)
+  const treeRef = useRef<HTMLDivElement>(null)
   const preRef = useRef<HTMLPreElement>(null)
   const dragRef = useRef<{ startY: number; startH: number } | null>(null)
   const lastExternal = useRef(value)
@@ -238,9 +239,25 @@ export function JsonResponseViewer({ value, onChange, onCopy, onPin }: Props) {
   }, [value])
 
   useLayoutEffect(() => {
-    if (!autoFitRef.current || mode === 'tree' || fullscreen) {
+    if (!autoFitRef.current || fullscreen) {
       return
     }
+
+    if (mode === 'tree') {
+      const tree = treeRef.current
+      if (!tree) {
+        return
+      }
+      const prev = tree.style.height
+      tree.style.height = 'auto'
+      const measured = tree.scrollHeight
+      tree.style.height = prev
+      // Tree is for browsing structure — give it a tall pane (at least content, up to 75vh).
+      setHeight(clampHeight(Math.max(measured + 8, Math.floor(window.innerHeight * 0.55))))
+      autoFitRef.current = false
+      return
+    }
+
     const area = areaRef.current
     const editor = editorRef.current
     if (!area || !editor) {
@@ -258,6 +275,16 @@ export function JsonResponseViewer({ value, onChange, onCopy, onPin }: Props) {
     setHeight(clampHeight(measured))
     autoFitRef.current = false
   }, [draft, mode, fullscreen])
+
+  const setViewerMode = (next: 'tree' | 'text') => {
+    if (next === mode) {
+      return
+    }
+    if (next === 'tree') {
+      autoFitRef.current = true
+    }
+    setMode(next)
+  }
 
   const html = useMemo(() => highlightJson(draft || ' ', query), [draft, query])
 
@@ -366,7 +393,7 @@ export function JsonResponseViewer({ value, onChange, onCopy, onPin }: Props) {
       setQuery={setQuery}
       onJump={jump}
       mode={mode}
-      setMode={setMode}
+      setMode={setViewerMode}
       canTree={canTree}
       fullscreen={fullscreen}
       onToggleFullscreen={() => setFullscreen((current) => !current)}
@@ -378,7 +405,7 @@ export function JsonResponseViewer({ value, onChange, onCopy, onPin }: Props) {
 
   const editorBody: ReactNode =
     mode === 'tree' && canTree ? (
-      <div className="json-response-tree" style={fullscreen ? undefined : { height }}>
+      <div ref={treeRef} className="json-response-tree" style={fullscreen ? undefined : { height }}>
         <JsonTreeNode value={parsed} depth={0} path="$" />
       </div>
     ) : (
@@ -406,7 +433,7 @@ export function JsonResponseViewer({ value, onChange, onCopy, onPin }: Props) {
     )
 
   const grip =
-    mode === 'text' && !fullscreen ? (
+    !fullscreen ? (
       <div
         className="json-response-grip"
         title="Drag to resize height"
