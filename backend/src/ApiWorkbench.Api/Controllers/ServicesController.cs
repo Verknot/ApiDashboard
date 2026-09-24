@@ -198,12 +198,40 @@ public sealed class ServicesController(
     {
         var result = await swaggerIngest.RefreshAllAsync(cancellationToken);
         logger.LogInformation("Swagger refresh: ok={Ok}, failed={Failed}", result.Ok, result.Failed);
-        return Ok(new SwaggerRefreshResponse(
+        return Ok(MapRefresh(result));
+    }
+
+    /// <summary>Стягивает swagger одного сервиса.</summary>
+    [HttpPost("{id:int}/swagger/refresh")]
+    public async Task<ActionResult<SwaggerRefreshResponse>> RefreshServiceSwagger(int id, CancellationToken cancellationToken)
+    {
+        if (await ForbidService(id, cancellationToken) is { } forbid)
+        {
+            return forbid;
+        }
+
+        try
+        {
+            var result = await swaggerIngest.RefreshServiceAsync(id, cancellationToken);
+            logger.LogInformation(
+                "Swagger refresh service {ServiceId}: ok={Ok}, failed={Failed}",
+                id,
+                result.Ok,
+                result.Failed);
+            return Ok(MapRefresh(result));
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
+
+    private static SwaggerRefreshResponse MapRefresh(SwaggerRefreshResult result) =>
+        new(
             result.Ok,
             result.Failed,
             result.Services.Select(s => new SwaggerServiceRefreshResponse(
-                s.Service, s.Status, s.Endpoints, s.Error, s.Added, s.Removed, s.Changed)).ToList()));
-    }
+                s.Service, s.Status, s.Endpoints, s.Error, s.Added, s.Removed, s.Changed)).ToList());
 
     private async Task<ActionResult?> ForbidService(int serviceId, CancellationToken cancellationToken)
     {

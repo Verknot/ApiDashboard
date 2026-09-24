@@ -133,6 +133,11 @@ export async function refreshSwagger(): Promise<SwaggerRefreshResponse> {
   return data
 }
 
+export async function refreshServiceSwagger(serviceId: number): Promise<SwaggerRefreshResponse> {
+  const { data } = await api.post<SwaggerRefreshResponse>(`/services/${serviceId}/swagger/refresh`)
+  return data
+}
+
 export async function fetchAdminUsers(): Promise<AdminUser[]> {
   const { data } = await api.get<AdminUser[]>('/admin/users')
   return data

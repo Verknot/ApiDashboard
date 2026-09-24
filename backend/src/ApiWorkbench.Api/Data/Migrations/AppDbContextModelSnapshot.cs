@@ -262,14 +262,14 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<JsonDocument>("ParamValues")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("param_values");
+
                     b.Property<JsonDocument>("TemplateBody")
                         .IsRequired()
                         .HasColumnType("jsonb")
                         .HasColumnName("template_body");
-
-                    b.Property<JsonDocument>("ParamValues")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("param_values");
 
                     b.Property<int>("UserId")
                         .HasColumnType("integer")

@@ -1,6 +1,6 @@
 import { Table, Tabs, message } from 'antd'
 import { useEffect, useState } from 'react'
-import { fetchConfig, fetchServices, getApiMessage, refreshSwagger, reloadConfig, saveConfig } from '../api/client'
+import { fetchConfig, fetchServices, getApiMessage, refreshServiceSwagger, refreshSwagger, reloadConfig, saveConfig } from '../api/client'
 import type { CatalogService, SwaggerRefreshResponse } from '../api/types'
 import { ContractDiffPanel } from '../components/ContractDiffPanel'
 import { UsersAdmin } from '../components/UsersAdmin'
@@ -32,6 +32,7 @@ function CatalogAdmin() {
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
+  const [refreshingServiceId, setRefreshingServiceId] = useState<number | null>(null)
   const [swaggerResult, setSwaggerResult] = useState<SwaggerRefreshResponse | null>(null)
   const [diffServiceId, setDiffServiceId] = useState<number | null>(null)
   const dirty = yaml !== savedYaml
@@ -218,7 +219,9 @@ function CatalogAdmin() {
             {refreshing ? 'Refreshing…' : 'Refresh swagger'}
           </button>
         </div>
-        <p className="hint-line">Refresh swagger также доступен всем пользователям на Workbench.</p>
+        <p className="hint-line">
+          Refresh all — кнопка выше. Один сервис — иконка в строке или на Workbench у сервиса.
+        </p>
         <Table
           rowKey="id"
           size="small"
@@ -254,6 +257,42 @@ function CatalogAdmin() {
               title: 'Regions',
               render: (_: unknown, row: CatalogService) =>
                 row.isRegional ? row.regions.map((region) => region.code).join(' · ') : '—',
+            },
+            {
+              title: '',
+              width: 44,
+              render: (_: unknown, row: CatalogService) => (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-compact"
+                  title={`Refresh swagger for ${row.name}`}
+                  disabled={refreshing || refreshingServiceId != null}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void (async () => {
+                      setRefreshingServiceId(row.id)
+                      try {
+                        const result = await refreshServiceSwagger(row.id)
+                        setSwaggerResult(result)
+                        loadServices()
+                        const item = result.services[0]
+                        if (result.failed === 0) {
+                          message.success(`Swagger ${row.name} updated`)
+                        } else {
+                          message.warning(item?.error ?? `Swagger ${row.name} failed`)
+                        }
+                      } catch (error) {
+                        message.error(getApiMessage(error, 'Could not refresh swagger'))
+                      } finally {
+                        setRefreshingServiceId(null)
+                      }
+                    })()
+                  }}
+                >
+                  <IconRefresh size={14} />
+                  {refreshingServiceId === row.id ? '…' : null}
+                </button>
+              ),
             },
           ]}
         />

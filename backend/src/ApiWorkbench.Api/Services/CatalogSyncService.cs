@@ -588,12 +588,26 @@ public sealed class CatalogSyncService(
     private async Task UpsertServiceAsync(ResolvedService resolved, CancellationToken cancellationToken)
     {
         var now = DateTimeOffset.UtcNow;
-        var service = await db.Services
-            .Include(s => s.Regions)
-            .Include(s => s.Urls)
-            .Include(s => s.SwaggerSources)
-            .Include(s => s.TokenUrls)
-            .FirstOrDefaultAsync(s => s.Name == resolved.Name, cancellationToken);
+        // Prefer already-tracked entity (same reload / duplicate YAML name) before hitting the DB.
+        var service = db.Services.Local
+            .FirstOrDefault(s => string.Equals(s.Name, resolved.Name, StringComparison.OrdinalIgnoreCase));
+
+        if (service is null)
+        {
+            service = await db.Services
+                .Include(s => s.Regions)
+                .Include(s => s.Urls)
+                .Include(s => s.SwaggerSources)
+                .Include(s => s.TokenUrls)
+                .FirstOrDefaultAsync(s => s.Name == resolved.Name, cancellationToken);
+        }
+        else
+        {
+            await db.Entry(service).Collection(s => s.Regions).LoadAsync(cancellationToken);
+            await db.Entry(service).Collection(s => s.Urls).LoadAsync(cancellationToken);
+            await db.Entry(service).Collection(s => s.SwaggerSources).LoadAsync(cancellationToken);
+            await db.Entry(service).Collection(s => s.TokenUrls).LoadAsync(cancellationToken);
+        }
 
         if (service is null)
         {

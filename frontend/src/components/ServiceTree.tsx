@@ -9,7 +9,9 @@ type Props = {
   loading?: boolean
   onOpenFree?: () => void
   onRefreshSwagger?: () => void
+  onRefreshServiceSwagger?: (serviceId: number) => void
   refreshingSwagger?: boolean
+  refreshingServiceId?: number | null
 }
 
 type TaggedEndpoints = {
@@ -166,7 +168,15 @@ function moduleKey(serviceId: number, module: string): string {
   return `${serviceId}::${module}`
 }
 
-export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, refreshingSwagger }: Props) {
+export function ServiceTree({
+  services,
+  loading,
+  onOpenFree,
+  onRefreshSwagger,
+  onRefreshServiceSwagger,
+  refreshingSwagger,
+  refreshingServiceId,
+}: Props) {
   const initialSearch = useMemo(() => loadSearchTabs(), [])
   const [searchTabs, setSearchTabs] = useState<SearchTab[]>(initialSearch.tabs)
   const [activeSearchTabId, setActiveSearchTabId] = useState(initialSearch.activeId)
@@ -464,6 +474,21 @@ export function ServiceTree({ services, loading, onOpenFree, onRefreshSwagger, r
                     </span>
                   </span>
                   {service.isRegional ? <span className="region-chip">{regionChip}</span> : null}
+                  {onRefreshServiceSwagger ? (
+                    <span
+                      className={`star-btn${refreshingServiceId === service.id ? ' on' : ''}`}
+                      title={`Refresh swagger for ${service.name}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        if (refreshingSwagger || refreshingServiceId != null) {
+                          return
+                        }
+                        onRefreshServiceSwagger(service.id)
+                      }}
+                    >
+                      <IconRefresh size={14} />
+                    </span>
+                  ) : null}
                   <span
                     className={`star-btn${favorite ? ' on' : ''}`}
                     title={favorite ? 'Remove from favorites' : 'Add to favorites'}

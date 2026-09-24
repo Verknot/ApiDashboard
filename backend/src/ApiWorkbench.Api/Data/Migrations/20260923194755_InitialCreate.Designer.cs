@@ -14,7 +14,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace ApiWorkbench.Api.Data.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260909102447_InitialCreate")]
+    [Migration("20260923194755_InitialCreate")]
     partial class InitialCreate
     {
         /// <inheritdoc />
@@ -22,7 +22,7 @@ namespace ApiWorkbench.Api.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
-                .HasAnnotation("ProductVersion", "8.0.11")
+                .HasAnnotation("ProductVersion", "10.0.12")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
@@ -41,6 +41,14 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("fetched_at")
                         .HasDefaultValueSql("NOW()");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("")
+                        .HasColumnName("module");
 
                     b.Property<JsonDocument>("RawJson")
                         .IsRequired()
@@ -79,10 +87,22 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("method");
 
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("")
+                        .HasColumnName("module");
+
                     b.Property<string>("OperationId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("operation_id");
+
+                    b.Property<JsonDocument>("Parameters")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("parameters");
 
                     b.Property<string>("Path")
                         .IsRequired()
@@ -102,17 +122,24 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("service_id");
 
-                    b.Property<List<string>>("Tags")
+                    b.PrimitiveCollection<List<string>>("Tags")
                         .IsRequired()
                         .HasColumnType("text[]")
                         .HasColumnName("tags");
 
+                    b.PrimitiveCollection<List<string>>("UserTags")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text[]")
+                        .HasColumnName("user_tags")
+                        .HasDefaultValueSql("'{}'");
+
                     b.HasKey("Id")
                         .HasName("pk_endpoints");
 
-                    b.HasIndex("ServiceId", "Path", "Method")
+                    b.HasIndex("ServiceId", "Module", "Path", "Method")
                         .IsUnique()
-                        .HasDatabaseName("ix_endpoints_service_id_path_method");
+                        .HasDatabaseName("ix_endpoints_service_id_module_path_method");
 
                     b.ToTable("endpoints", (string)null);
                 });
@@ -165,6 +192,10 @@ namespace ApiWorkbench.Api.Data.Migrations
                     b.Property<string>("ResponseBody")
                         .HasColumnType("text")
                         .HasColumnName("response_body");
+
+                    b.Property<JsonDocument>("ResponseHeaders")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("response_headers");
 
                     b.Property<int?>("ResponseStatus")
                         .HasColumnType("integer")
@@ -233,6 +264,10 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
+
+                    b.Property<JsonDocument>("ParamValues")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("param_values");
 
                     b.Property<JsonDocument>("TemplateBody")
                         .IsRequired()
@@ -356,10 +391,24 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasDefaultValue("none")
                         .HasColumnName("auth_type");
 
+                    b.Property<string>("CertBase64")
+                        .HasColumnType("text")
+                        .HasColumnName("cert_base64");
+
+                    b.Property<string>("CertPassword")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cert_password");
+
                     b.Property<string>("CertPath")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("cert_path");
+
+                    b.Property<string>("CertVaultPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cert_vault_path");
 
                     b.Property<string>("Color")
                         .HasMaxLength(7)
@@ -401,6 +450,11 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasColumnType("boolean")
                         .HasColumnName("proxy");
 
+                    b.Property<string>("SplunkUrl")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("splunk_url");
+
                     b.Property<string>("SwaggerAuthType")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -409,15 +463,85 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasDefaultValue("none")
                         .HasColumnName("swagger_auth_type");
 
+                    b.Property<string>("SwaggerBasicPassword")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("swagger_basic_password");
+
+                    b.Property<string>("SwaggerBasicUsername")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("swagger_basic_username");
+
                     b.Property<string>("SwaggerUrl")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("swagger_url");
 
+                    b.Property<bool>("SwaggerVaultBase64")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("swagger_vault_base64");
+
+                    b.Property<string>("SwaggerVaultPasswordPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("swagger_vault_password_path");
+
                     b.Property<string>("SwaggerVaultPath")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
                         .HasColumnName("swagger_vault_path");
+
+                    b.Property<string>("SwaggerVaultUsernamePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("swagger_vault_username_path");
+
+                    b.Property<string>("TokenBody")
+                        .HasMaxLength(4000)
+                        .HasColumnType("character varying(4000)")
+                        .HasColumnName("token_body");
+
+                    b.Property<string>("TokenField")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("accessToken")
+                        .HasColumnName("token_field");
+
+                    b.Property<string>("TokenPassword")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("token_password");
+
+                    b.Property<string>("TokenUsername")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("token_username");
+
+                    b.Property<bool>("TokenVaultBase64")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("token_vault_base64");
+
+                    b.Property<string>("TokenVaultPasswordPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("token_vault_password_path");
+
+                    b.Property<string>("TokenVaultPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("token_vault_path");
+
+                    b.Property<string>("TokenVaultUsernamePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("token_vault_username_path");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .ValueGeneratedOnAdd()
@@ -474,6 +598,172 @@ namespace ApiWorkbench.Api.Data.Migrations
                     b.ToTable("service_regions", (string)null);
                 });
 
+            modelBuilder.Entity("ApiWorkbench.Api.Domain.ServiceSwaggerSource", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("ApiAuthType")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("api_auth_type");
+
+                    b.Property<string>("AuthType")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("none")
+                        .HasColumnName("auth_type");
+
+                    b.Property<string>("BasicPassword")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("basic_password");
+
+                    b.Property<string>("BasicUsername")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("basic_username");
+
+                    b.Property<string>("CertBase64")
+                        .HasColumnType("text")
+                        .HasColumnName("cert_base64");
+
+                    b.Property<string>("CertPassword")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cert_password");
+
+                    b.Property<string>("CertPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cert_path");
+
+                    b.Property<string>("CertVaultPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("cert_vault_path");
+
+                    b.Property<bool>("Insecure")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("insecure");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("")
+                        .HasColumnName("name");
+
+                    b.Property<int>("ServiceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("service_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("TokenField")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("token_field");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("url");
+
+                    b.Property<bool>("VaultBase64")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("vault_base64");
+
+                    b.Property<string>("VaultPasswordPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("vault_password_path");
+
+                    b.Property<string>("VaultPath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("vault_path");
+
+                    b.Property<string>("VaultUsernamePath")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("vault_username_path");
+
+                    b.HasKey("Id")
+                        .HasName("pk_service_swagger_sources");
+
+                    b.HasIndex("ServiceId", "Name")
+                        .IsUnique()
+                        .HasDatabaseName("ix_service_swagger_sources_service_id_name");
+
+                    b.ToTable("service_swagger_sources", (string)null);
+                });
+
+            modelBuilder.Entity("ApiWorkbench.Api.Domain.ServiceTokenUrl", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Environment")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("environment");
+
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("")
+                        .HasColumnName("module");
+
+                    b.Property<string>("RegionCode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("")
+                        .HasColumnName("region_code");
+
+                    b.Property<int>("ServiceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("service_id");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id")
+                        .HasName("pk_service_token_urls");
+
+                    b.HasIndex("ServiceId", "Module", "Environment", "RegionCode")
+                        .IsUnique()
+                        .HasDatabaseName("ix_service_token_urls_service_id_module_environment_region_code");
+
+                    b.ToTable("service_token_urls", (string)null);
+                });
+
             modelBuilder.Entity("ApiWorkbench.Api.Domain.ServiceUrl", b =>
                 {
                     b.Property<int>("Id")
@@ -495,6 +785,14 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasColumnType("character varying(20)")
                         .HasColumnName("environment");
 
+                    b.Property<string>("Module")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValue("")
+                        .HasColumnName("module");
+
                     b.Property<string>("RegionCode")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -510,9 +808,9 @@ namespace ApiWorkbench.Api.Data.Migrations
                     b.HasKey("Id")
                         .HasName("pk_service_urls");
 
-                    b.HasIndex("ServiceId", "Environment", "RegionCode")
+                    b.HasIndex("ServiceId", "Module", "Environment", "RegionCode")
                         .IsUnique()
-                        .HasDatabaseName("ix_service_urls_service_id_environment_region_code");
+                        .HasDatabaseName("ix_service_urls_service_id_module_environment_region_code");
 
                     b.ToTable("service_urls", (string)null);
                 });
@@ -575,6 +873,124 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasDatabaseName("ix_users_email");
 
                     b.ToTable("users", (string)null);
+                });
+
+            modelBuilder.Entity("ApiWorkbench.Api.Domain.UserFavoriteRequest", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<int>("EndpointId")
+                        .HasColumnType("integer")
+                        .HasColumnName("endpoint_id");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<JsonDocument>("ParamValues")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("param_values");
+
+                    b.Property<JsonDocument>("RequestBody")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("request_body");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_favorite_requests");
+
+                    b.HasIndex("EndpointId")
+                        .HasDatabaseName("ix_user_favorite_requests_endpoint_id");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_user_favorite_requests_user_created");
+
+                    b.ToTable("user_favorite_requests", (string)null);
+                });
+
+            modelBuilder.Entity("ApiWorkbench.Api.Domain.UserPin", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Alias")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("alias");
+
+                    b.Property<string>("Comment")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("comment");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<int?>("ServiceId")
+                        .HasColumnType("integer")
+                        .HasColumnName("service_id");
+
+                    b.Property<string>("SourceKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("source_key");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("NOW()");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("integer")
+                        .HasColumnName("user_id");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("value");
+
+                    b.HasKey("Id")
+                        .HasName("pk_user_pins");
+
+                    b.HasIndex("ServiceId")
+                        .HasDatabaseName("ix_user_pins_service_id");
+
+                    b.HasIndex("UserId", "Alias")
+                        .IsUnique()
+                        .HasDatabaseName("ix_user_pins_user_alias");
+
+                    b.HasIndex("UserId", "UpdatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("ix_user_pins_user_updated");
+
+                    b.ToTable("user_pins", (string)null);
                 });
 
             modelBuilder.Entity("ApiWorkbench.Api.Domain.UserRoleAssignment", b =>
@@ -755,6 +1171,30 @@ namespace ApiWorkbench.Api.Data.Migrations
                     b.Navigation("Service");
                 });
 
+            modelBuilder.Entity("ApiWorkbench.Api.Domain.ServiceSwaggerSource", b =>
+                {
+                    b.HasOne("ApiWorkbench.Api.Domain.ServiceEntity", "Service")
+                        .WithMany("SwaggerSources")
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_service_swagger_sources_services_service_id");
+
+                    b.Navigation("Service");
+                });
+
+            modelBuilder.Entity("ApiWorkbench.Api.Domain.ServiceTokenUrl", b =>
+                {
+                    b.HasOne("ApiWorkbench.Api.Domain.ServiceEntity", "Service")
+                        .WithMany("TokenUrls")
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_service_token_urls_services_service_id");
+
+                    b.Navigation("Service");
+                });
+
             modelBuilder.Entity("ApiWorkbench.Api.Domain.ServiceUrl", b =>
                 {
                     b.HasOne("ApiWorkbench.Api.Domain.ServiceEntity", "Service")
@@ -765,6 +1205,47 @@ namespace ApiWorkbench.Api.Data.Migrations
                         .HasConstraintName("fk_service_urls_services_service_id");
 
                     b.Navigation("Service");
+                });
+
+            modelBuilder.Entity("ApiWorkbench.Api.Domain.UserFavoriteRequest", b =>
+                {
+                    b.HasOne("ApiWorkbench.Api.Domain.EndpointEntity", "Endpoint")
+                        .WithMany()
+                        .HasForeignKey("EndpointId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_favorite_requests_endpoints_endpoint_id");
+
+                    b.HasOne("ApiWorkbench.Api.Domain.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_favorite_requests_users_user_id");
+
+                    b.Navigation("Endpoint");
+
+                    b.Navigation("User");
+                });
+
+            modelBuilder.Entity("ApiWorkbench.Api.Domain.UserPin", b =>
+                {
+                    b.HasOne("ApiWorkbench.Api.Domain.ServiceEntity", "Service")
+                        .WithMany()
+                        .HasForeignKey("ServiceId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_user_pins_services_service_id");
+
+                    b.HasOne("ApiWorkbench.Api.Domain.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_user_pins_users_user_id");
+
+                    b.Navigation("Service");
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("ApiWorkbench.Api.Domain.UserRoleAssignment", b =>
@@ -814,6 +1295,10 @@ namespace ApiWorkbench.Api.Data.Migrations
                     b.Navigation("Endpoints");
 
                     b.Navigation("Regions");
+
+                    b.Navigation("SwaggerSources");
+
+                    b.Navigation("TokenUrls");
 
                     b.Navigation("Urls");
                 });

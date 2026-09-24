@@ -35,7 +35,7 @@ public sealed class FavoritesController(AppDbContext db, IPermissionService perm
 
         return Ok(rows
             .Where(f => access.CanSeeService(f.Endpoint.ServiceId))
-            .Select(Map)
+            .Select(f => Map(f, f.Endpoint))
             .ToList());
     }
 
@@ -71,6 +71,8 @@ public sealed class FavoritesController(AppDbContext db, IPermissionService perm
             return NotFound();
         }
 
+        // Do not assign AsNoTracking Endpoint/Service navigations — EF would treat them as inserts
+        // and hit pk_services / pk_endpoints on SaveChanges.
         var entity = new UserFavoriteRequest
         {
             UserId = userId.Value,
@@ -78,12 +80,11 @@ public sealed class FavoritesController(AppDbContext db, IPermissionService perm
             Name = name,
             ParamValues = ParseOptionalObject(request.ParamValues),
             RequestBody = ParseOptionalObject(request.RequestBody),
-            CreatedAt = DateTimeOffset.UtcNow,
-            Endpoint = endpoint
+            CreatedAt = DateTimeOffset.UtcNow
         };
         db.UserFavoriteRequests.Add(entity);
         await db.SaveChangesAsync(cancellationToken);
-        return Ok(Map(entity));
+        return Ok(Map(entity, endpoint));
     }
 
     [HttpDelete("{id:int}")]
@@ -106,15 +107,15 @@ public sealed class FavoritesController(AppDbContext db, IPermissionService perm
         return NoContent();
     }
 
-    private static FavoriteRequestResponse Map(UserFavoriteRequest f) =>
+    private static FavoriteRequestResponse Map(UserFavoriteRequest f, EndpointEntity endpoint) =>
         new(
             f.Id,
             f.EndpointId,
-            f.Endpoint.ServiceId,
-            f.Endpoint.Service?.Name ?? string.Empty,
-            f.Endpoint.Method,
-            f.Endpoint.Path,
-            f.Endpoint.Module ?? string.Empty,
+            endpoint.ServiceId,
+            endpoint.Service?.Name ?? string.Empty,
+            endpoint.Method,
+            endpoint.Path,
+            endpoint.Module ?? string.Empty,
             f.Name,
             JsonDocs.ToElement(f.ParamValues),
             JsonDocs.ToElement(f.RequestBody),

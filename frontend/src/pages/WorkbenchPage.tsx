@@ -1,6 +1,6 @@
 import { message } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { fetchServices, getApiMessage, refreshSwagger } from '../api/client'
+import { fetchServices, getApiMessage, refreshServiceSwagger, refreshSwagger } from '../api/client'
 import { prettyJson } from '../api/schema'
 import type { CatalogService, ServiceEndpoint } from '../api/types'
 import { EnvRegionBar } from '../components/EnvRegionBar'
@@ -19,6 +19,7 @@ export function WorkbenchPage() {
   const [services, setServices] = useState<CatalogService[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshingSwagger, setRefreshingSwagger] = useState(false)
+  const [refreshingServiceId, setRefreshingServiceId] = useState<number | null>(null)
   const canSend = useSession((s) => s.me?.canSend)
   const selectedServiceId = useWorkbench((s) => s.selectedServiceId)
   const selectedEndpointId = useWorkbench((s) => s.selectedEndpointId)
@@ -140,6 +141,30 @@ export function WorkbenchPage() {
     }
   }
 
+  const onRefreshServiceSwagger = async (serviceId: number) => {
+    setRefreshingServiceId(serviceId)
+    try {
+      const result = await refreshServiceSwagger(serviceId)
+      const items = await fetchServices()
+      setServices(items)
+      items.forEach(rememberDefaultRegion)
+      const row = result.services[0]
+      if (result.failed === 0) {
+        message.success(
+          row
+            ? `Swagger ${row.service}: ${row.endpoints} endpoints (+${row.added}/-${row.removed}/~${row.changed})`
+            : `Swagger service ${serviceId} updated`,
+        )
+      } else {
+        message.warning(row?.error ? `${row.service}: ${row.error}` : `Swagger service ${serviceId} failed`)
+      }
+    } catch (error) {
+      message.error(getApiMessage(error, 'Could not refresh swagger'))
+    } finally {
+      setRefreshingServiceId(null)
+    }
+  }
+
   return (
     <>
       <div className="page-head page-head-compact">
@@ -209,7 +234,9 @@ export function WorkbenchPage() {
               loading={loading}
               onOpenFree={canSend ? () => openFreeTab() : undefined}
               onRefreshSwagger={() => void onRefreshSwagger()}
+              onRefreshServiceSwagger={(serviceId) => void onRefreshServiceSwagger(serviceId)}
               refreshingSwagger={refreshingSwagger}
+              refreshingServiceId={refreshingServiceId}
             />
           </div>
         }

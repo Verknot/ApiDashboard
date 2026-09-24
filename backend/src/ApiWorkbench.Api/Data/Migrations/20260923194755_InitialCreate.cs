@@ -40,9 +40,26 @@ namespace ApiWorkbench.Api.Data.Migrations
                     swagger_url = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     swagger_auth_type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "none"),
                     swagger_vault_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    swagger_vault_username_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    swagger_vault_password_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    swagger_vault_base64 = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    swagger_basic_username = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
+                    swagger_basic_password = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     auth_type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "none"),
                     cert_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    cert_base64 = table.Column<string>(type: "text", nullable: true),
+                    cert_vault_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    cert_password = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    token_username = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
+                    token_password = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    token_vault_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    token_vault_username_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    token_vault_password_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    token_vault_base64 = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    token_body = table.Column<string>(type: "character varying(4000)", maxLength: 4000, nullable: true),
+                    token_field = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false, defaultValue: "accessToken"),
                     proxy = table.Column<bool>(type: "boolean", nullable: false),
+                    splunk_url = table.Column<string>(type: "character varying(2000)", maxLength: 2000, nullable: true),
                     is_regional = table.Column<bool>(type: "boolean", nullable: false),
                     default_region = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: true),
                     is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
@@ -80,6 +97,7 @@ namespace ApiWorkbench.Api.Data.Migrations
                     id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     service_id = table.Column<int>(type: "integer", nullable: false),
+                    module = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false, defaultValue: ""),
                     fetched_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
                     raw_json = table.Column<JsonDocument>(type: "jsonb", nullable: false)
                 },
@@ -101,13 +119,16 @@ namespace ApiWorkbench.Api.Data.Migrations
                     id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     service_id = table.Column<int>(type: "integer", nullable: false),
+                    module = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false, defaultValue: ""),
                     path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     method = table.Column<string>(type: "character varying(10)", maxLength: 10, nullable: false),
                     description = table.Column<string>(type: "text", nullable: true),
                     operation_id = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     request_schema = table.Column<JsonDocument>(type: "jsonb", nullable: true),
                     response_schema = table.Column<JsonDocument>(type: "jsonb", nullable: true),
-                    tags = table.Column<List<string>>(type: "text[]", nullable: false)
+                    parameters = table.Column<JsonDocument>(type: "jsonb", nullable: true),
+                    tags = table.Column<List<string>>(type: "text[]", nullable: false),
+                    user_tags = table.Column<List<string>>(type: "text[]", nullable: false, defaultValueSql: "'{}'")
                 },
                 constraints: table =>
                 {
@@ -143,6 +164,65 @@ namespace ApiWorkbench.Api.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "service_swagger_sources",
+                columns: table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    service_id = table.Column<int>(type: "integer", nullable: false),
+                    name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false, defaultValue: ""),
+                    sort_order = table.Column<int>(type: "integer", nullable: false),
+                    url = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    auth_type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false, defaultValue: "none"),
+                    vault_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    vault_username_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    vault_password_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    vault_base64 = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    basic_username = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: true),
+                    basic_password = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    insecure = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
+                    api_auth_type = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: true),
+                    cert_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    cert_base64 = table.Column<string>(type: "text", nullable: true),
+                    cert_vault_path = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    cert_password = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    token_field = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_service_swagger_sources", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_service_swagger_sources_services_service_id",
+                        column: x => x.service_id,
+                        principalTable: "services",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "service_token_urls",
+                columns: table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    service_id = table.Column<int>(type: "integer", nullable: false),
+                    environment = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
+                    region_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false, defaultValue: ""),
+                    module = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false, defaultValue: ""),
+                    url = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_service_token_urls", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_service_token_urls_services_service_id",
+                        column: x => x.service_id,
+                        principalTable: "services",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "service_urls",
                 columns: table => new
                 {
@@ -151,6 +231,7 @@ namespace ApiWorkbench.Api.Data.Migrations
                     service_id = table.Column<int>(type: "integer", nullable: false),
                     environment = table.Column<string>(type: "character varying(20)", maxLength: 20, nullable: false),
                     region_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false, defaultValue: ""),
+                    module = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false, defaultValue: ""),
                     base_url = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false)
                 },
                 constraints: table =>
@@ -204,6 +285,38 @@ namespace ApiWorkbench.Api.Data.Migrations
                         principalTable: "users",
                         principalColumn: "id",
                         onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "user_pins",
+                columns: table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    user_id = table.Column<int>(type: "integer", nullable: false),
+                    alias = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    value = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
+                    comment = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
+                    source_key = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
+                    service_id = table.Column<int>(type: "integer", nullable: true),
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()"),
+                    updated_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_user_pins", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_user_pins_services_service_id",
+                        column: x => x.service_id,
+                        principalTable: "services",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.SetNull);
+                    table.ForeignKey(
+                        name: "fk_user_pins_users_user_id",
+                        column: x => x.user_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
@@ -264,6 +377,7 @@ namespace ApiWorkbench.Api.Data.Migrations
                     request_body = table.Column<JsonDocument>(type: "jsonb", nullable: true),
                     response_status = table.Column<int>(type: "integer", nullable: true),
                     response_body = table.Column<string>(type: "text", nullable: true),
+                    response_headers = table.Column<JsonDocument>(type: "jsonb", nullable: true),
                     response_truncated = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     response_time_ms = table.Column<int>(type: "integer", nullable: true),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
@@ -301,6 +415,7 @@ namespace ApiWorkbench.Api.Data.Migrations
                     endpoint_id = table.Column<int>(type: "integer", nullable: false),
                     name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     template_body = table.Column<JsonDocument>(type: "jsonb", nullable: false),
+                    param_values = table.Column<JsonDocument>(type: "jsonb", nullable: true),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
                 },
                 constraints: table =>
@@ -320,15 +435,45 @@ namespace ApiWorkbench.Api.Data.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "user_favorite_requests",
+                columns: table => new
+                {
+                    id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    user_id = table.Column<int>(type: "integer", nullable: false),
+                    endpoint_id = table.Column<int>(type: "integer", nullable: false),
+                    name = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
+                    param_values = table.Column<JsonDocument>(type: "jsonb", nullable: true),
+                    request_body = table.Column<JsonDocument>(type: "jsonb", nullable: true),
+                    created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "NOW()")
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("pk_user_favorite_requests", x => x.id);
+                    table.ForeignKey(
+                        name: "fk_user_favorite_requests_endpoints_endpoint_id",
+                        column: x => x.endpoint_id,
+                        principalTable: "endpoints",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "fk_user_favorite_requests_users_user_id",
+                        column: x => x.user_id,
+                        principalTable: "users",
+                        principalColumn: "id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "idx_contract_snapshots_service_fetched",
                 table: "contract_snapshots",
                 columns: new[] { "service_id", "fetched_at" });
 
             migrationBuilder.CreateIndex(
-                name: "ix_endpoints_service_id_path_method",
+                name: "ix_endpoints_service_id_module_path_method",
                 table: "endpoints",
-                columns: new[] { "service_id", "path", "method" },
+                columns: new[] { "service_id", "module", "path", "method" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -390,9 +535,21 @@ namespace ApiWorkbench.Api.Data.Migrations
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "ix_service_urls_service_id_environment_region_code",
+                name: "ix_service_swagger_sources_service_id_name",
+                table: "service_swagger_sources",
+                columns: new[] { "service_id", "name" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_service_token_urls_service_id_module_environment_region_code",
+                table: "service_token_urls",
+                columns: new[] { "service_id", "module", "environment", "region_code" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_service_urls_service_id_module_environment_region_code",
                 table: "service_urls",
-                columns: new[] { "service_id", "environment", "region_code" },
+                columns: new[] { "service_id", "module", "environment", "region_code" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
@@ -400,6 +557,34 @@ namespace ApiWorkbench.Api.Data.Migrations
                 table: "services",
                 column: "name",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_user_favorite_requests_endpoint_id",
+                table: "user_favorite_requests",
+                column: "endpoint_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_user_favorite_requests_user_created",
+                table: "user_favorite_requests",
+                columns: new[] { "user_id", "created_at" },
+                descending: new[] { false, true });
+
+            migrationBuilder.CreateIndex(
+                name: "ix_user_pins_service_id",
+                table: "user_pins",
+                column: "service_id");
+
+            migrationBuilder.CreateIndex(
+                name: "ix_user_pins_user_alias",
+                table: "user_pins",
+                columns: new[] { "user_id", "alias" },
+                unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "ix_user_pins_user_updated",
+                table: "user_pins",
+                columns: new[] { "user_id", "updated_at" },
+                descending: new[] { false, true });
 
             migrationBuilder.CreateIndex(
                 name: "ix_user_role_assignments_granted_by_id",
@@ -435,53 +620,11 @@ namespace ApiWorkbench.Api.Data.Migrations
                 table: "users",
                 column: "email",
                 unique: true);
-
-            migrationBuilder.Sql("""
-                CREATE OR REPLACE FUNCTION trim_request_history()
-                RETURNS trigger AS $$
-                BEGIN
-                    DELETE FROM request_history
-                    WHERE id IN (
-                        SELECT id FROM request_history
-                        WHERE user_id = NEW.user_id
-                        ORDER BY created_at DESC, id DESC
-                        OFFSET 100
-                    );
-                    RETURN NEW;
-                END;
-                $$ LANGUAGE plpgsql;
-
-                CREATE TRIGGER trg_trim_request_history
-                AFTER INSERT ON request_history
-                FOR EACH ROW
-                EXECUTE FUNCTION trim_request_history();
-
-                CREATE OR REPLACE FUNCTION get_roles_hash()
-                RETURNS TEXT AS $$
-                DECLARE
-                    hash TEXT;
-                BEGIN
-                    SELECT MD5(string_agg(
-                        CONCAT(user_id, ':', role_id, ':', COALESCE(service_id, 0)),
-                        ';' ORDER BY user_id, role_id, service_id
-                    ))
-                    INTO hash
-                    FROM user_role_assignments;
-                    RETURN COALESCE(hash, 'empty');
-                END;
-                $$ LANGUAGE plpgsql;
-                """);
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql("""
-                DROP TRIGGER IF EXISTS trg_trim_request_history ON request_history;
-                DROP FUNCTION IF EXISTS trim_request_history();
-                DROP FUNCTION IF EXISTS get_roles_hash();
-                """);
-
             migrationBuilder.DropTable(
                 name: "contract_snapshots");
 
@@ -498,7 +641,19 @@ namespace ApiWorkbench.Api.Data.Migrations
                 name: "service_regions");
 
             migrationBuilder.DropTable(
+                name: "service_swagger_sources");
+
+            migrationBuilder.DropTable(
+                name: "service_token_urls");
+
+            migrationBuilder.DropTable(
                 name: "service_urls");
+
+            migrationBuilder.DropTable(
+                name: "user_favorite_requests");
+
+            migrationBuilder.DropTable(
+                name: "user_pins");
 
             migrationBuilder.DropTable(
                 name: "user_role_assignments");

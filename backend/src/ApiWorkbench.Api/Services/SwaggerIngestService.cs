@@ -38,6 +38,7 @@ public sealed class SwaggerRefreshResult
 public interface ISwaggerIngestService
 {
     Task<SwaggerRefreshResult> RefreshAllAsync(CancellationToken cancellationToken = default);
+    Task<SwaggerRefreshResult> RefreshServiceAsync(int serviceId, CancellationToken cancellationToken = default);
 }
 
 public sealed class SwaggerIngestService(
@@ -67,6 +68,26 @@ public sealed class SwaggerIngestService(
             Ok = results.Count(r => r.Status == "ok"),
             Failed = results.Count(r => r.Status != "ok"),
             Services = results
+        };
+    }
+
+    public async Task<SwaggerRefreshResult> RefreshServiceAsync(int serviceId, CancellationToken cancellationToken = default)
+    {
+        var service = await db.Services
+            .Include(s => s.SwaggerSources)
+            .FirstOrDefaultAsync(s => s.Id == serviceId && s.IsActive, cancellationToken);
+
+        if (service is null)
+        {
+            throw new KeyNotFoundException($"Service {serviceId} not found.");
+        }
+
+        var result = await RefreshOneAsync(service, cancellationToken);
+        return new SwaggerRefreshResult
+        {
+            Ok = result.Status == "ok" ? 1 : 0,
+            Failed = result.Status == "ok" ? 0 : 1,
+            Services = [result]
         };
     }
 
